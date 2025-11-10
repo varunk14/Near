@@ -9,12 +9,6 @@ function App() {
   return (
     <Router>
       <div className="App">
-        <header className="App-header">
-          <Link to="/" className="header-link">
-            <h1>Near</h1>
-            <p className="subtitle">Studio Quality Recording & Live Chat</p>
-          </Link>
-        </header>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/studio" element={<Studio />} />
