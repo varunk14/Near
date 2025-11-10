@@ -27,7 +27,7 @@ const getWebSocketUrl = () => {
 const WS_URL = getWebSocketUrl()
 
 // Remote Video Component
-function RemoteVideo({ userId, stream, connectionState, userName }) {
+function RemoteVideo({ userId, stream, connectionState, userName, hasVideo, hasAudio }) {
   const videoRef = useRef(null)
 
   useEffect(() => {
@@ -36,28 +36,47 @@ function RemoteVideo({ userId, stream, connectionState, userName }) {
     }
   }, [stream])
 
-  return (
-    <div className="video-wrapper">
-      {stream ? (
-        <>
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            className="video-preview remote-video"
-          />
-          <div className="video-label">
-            {userName || `User ${userId.substring(0, 8)}`}
-            {connectionState && connectionState !== 'connected' && (
-              <span className="connection-badge">{connectionState}</span>
-            )}
-          </div>
-        </>
-      ) : (
+  // Show different states based on connection and video availability
+  if (!stream) {
+    return (
+      <div className="video-wrapper">
         <div className="waiting-message">
           <p>Connecting to {userName || userId.substring(0, 8)}...</p>
         </div>
-      )}
+      </div>
+    )
+  }
+
+  if (stream && !hasVideo) {
+    return (
+      <div className="video-wrapper">
+        <div className="no-video-message">
+          <div className="no-video-icon">📷</div>
+          <p>{userName || `User ${userId.substring(0, 8)}`}</p>
+          <p className="no-video-hint">Camera off or not available</p>
+          {connectionState && connectionState !== 'connected' && (
+            <span className="connection-badge">{connectionState}</span>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="video-wrapper">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        className="video-preview remote-video"
+      />
+      <div className="video-label">
+        {userName || `User ${userId.substring(0, 8)}`}
+        {!hasAudio && <span className="audio-badge">🔇</span>}
+        {connectionState && connectionState !== 'connected' && (
+          <span className="connection-badge">{connectionState}</span>
+        )}
+      </div>
     </div>
   )
 }
@@ -365,14 +384,25 @@ function DualStream() {
     addLocalTracksToPeerConnection(pc)
 
     pc.ontrack = (event) => {
-      console.log(`Received remote stream from ${targetUserId}`)
+      console.log(`Received remote stream from ${targetUserId}`, event.streams[0])
       const stream = event.streams[0]
       remoteStreamsRef.current.set(targetUserId, stream)
+      
+      // Check if stream has video/audio tracks
+      const hasVideo = stream.getVideoTracks().length > 0
+      const hasAudio = stream.getAudioTracks().length > 0
+      
+      console.log(`Stream from ${targetUserId} - Video: ${hasVideo}, Audio: ${hasAudio}`)
       
       // Update state to trigger re-render
       setRemoteUsers(prev => {
         const newMap = new Map(prev)
-        newMap.set(targetUserId, { stream, connectionState: pc.connectionState })
+        newMap.set(targetUserId, { 
+          stream, 
+          connectionState: pc.connectionState,
+          hasVideo,
+          hasAudio
+        })
         return newMap
       })
     }
@@ -724,6 +754,8 @@ function DualStream() {
             stream={userData.stream}
             connectionState={userData.connectionState}
             userName={userData.name}
+            hasVideo={userData.hasVideo}
+            hasAudio={userData.hasAudio}
           />
         ))}
 
