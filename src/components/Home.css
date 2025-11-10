@@ -50,6 +50,17 @@
   box-shadow: 0 8px 24px rgba(102, 126, 234, 0.2);
 }
 
+.option-card.featured {
+  border-color: #667eea;
+  background: linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%);
+  border-width: 3px;
+}
+
+.option-card.featured:hover {
+  border-color: #5568d3;
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+}
+
 .option-card h2 {
   font-size: 1.5rem;
   margin-bottom: 0.5rem;

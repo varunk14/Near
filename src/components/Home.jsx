@@ -27,7 +27,7 @@ function Home() {
         <div className="options">
           <div className="option-card">
             <h2>🎥 Recording Studio</h2>
-            <p>Record high-quality video with progressive upload</p>
+            <p>Record high-quality video with progressive upload (solo)</p>
             <button 
               className="btn btn-primary"
               onClick={() => navigate('/studio')}
@@ -38,7 +38,7 @@ function Home() {
 
           <div className="option-card">
             <h2>💬 Live Chat</h2>
-            <p>1-to-1 video chat with WebRTC</p>
+            <p>1-to-1 video chat with WebRTC (no recording)</p>
             <div className="chat-actions">
               <button 
                 className="btn btn-primary"
@@ -61,6 +61,39 @@ function Home() {
                   disabled={!roomId.trim()}
                 >
                   Join Room
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="option-card featured">
+            <h2>🎬 Near Studio (Dual Stream)</h2>
+            <p>Live video chat + High-quality recording simultaneously</p>
+            <div className="chat-actions">
+              <button 
+                className="btn btn-primary"
+                onClick={() => {
+                  const newRoomId = `room_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+                  navigate(`/studio/${newRoomId}`)
+                }}
+              >
+                Create Studio
+              </button>
+              <div className="join-section">
+                <input
+                  type="text"
+                  placeholder="Enter studio room ID"
+                  value={roomId}
+                  onChange={(e) => setRoomId(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && roomId.trim() && navigate(`/studio/${roomId.trim()}`)}
+                  className="room-input"
+                />
+                <button 
+                  className="btn btn-secondary"
+                  onClick={() => roomId.trim() && navigate(`/studio/${roomId.trim()}`)}
+                  disabled={!roomId.trim()}
+                >
+                  Join Studio
                 </button>
               </div>
             </div>
