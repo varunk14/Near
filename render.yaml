@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: near-signaling-server
+    env: node
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGIN
+        value: https://your-app.vercel.app  # Update with your Vercel URL
+    healthCheckPath: /health
+

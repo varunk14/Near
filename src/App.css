@@ -1,0 +1,31 @@
+.App {
+  text-align: center;
+}
+
+.App-header {
+  margin-bottom: 2rem;
+  color: white;
+}
+
+.header-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
+.header-link:hover {
+  opacity: 0.9;
+}
+
+.App-header h1 {
+  font-size: 3rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.subtitle {
+  font-size: 1.2rem;
+  opacity: 0.9;
+}
+
