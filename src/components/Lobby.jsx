@@ -13,6 +13,7 @@ function Lobby() {
   const [previewStream, setPreviewStream] = useState(null)
   const [error, setError] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [copied, setCopied] = useState(false)
   
   const videoRef = useRef(null)
 
@@ -93,6 +94,21 @@ function Lobby() {
     }
   }
 
+  const copyStudioId = () => {
+    if (roomId) {
+      navigator.clipboard.writeText(roomId)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  const copyStudioLink = () => {
+    const fullUrl = `${window.location.origin}/studio/${roomId}/lobby`
+    navigator.clipboard.writeText(fullUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   const handleJoinStudio = () => {
     // Stop preview stream
     if (previewStream) {
@@ -113,6 +129,33 @@ function Lobby() {
       <div className="lobby-card">
         <h1>Green Room</h1>
         <p className="lobby-subtitle">Check your devices before joining the studio</p>
+
+        {/* Studio ID Share Section */}
+        {roomId && (
+          <div className="share-section">
+            <div className="share-header">
+              <span className="share-label">Studio ID:</span>
+              <code className="studio-id">{roomId}</code>
+            </div>
+            <div className="share-buttons">
+              <button
+                onClick={copyStudioId}
+                className="btn btn-copy"
+                title="Copy Studio ID"
+              >
+                {copied ? '✓ Copied!' : '📋 Copy ID'}
+              </button>
+              <button
+                onClick={copyStudioLink}
+                className="btn btn-copy"
+                title="Copy Studio Link"
+              >
+                {copied ? '✓ Copied!' : '🔗 Copy Link'}
+              </button>
+            </div>
+            <p className="share-hint">Share this ID or link with your friends to invite them</p>
+          </div>
+        )}
 
         {error && (
           <div className="status status-error">

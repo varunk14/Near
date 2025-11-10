@@ -26,8 +26,81 @@
 .lobby-subtitle {
   font-size: 1.1rem;
   color: #666;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
   text-align: center;
+}
+
+.share-section {
+  background: #f8f9fa;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.share-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.share-label {
+  font-weight: 600;
+  color: #333;
+  font-size: 0.95rem;
+}
+
+.studio-id {
+  background: white;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-size: 0.9rem;
+  color: #667eea;
+  font-weight: 600;
+  border: 1px solid #e0e0e0;
+  flex: 1;
+  min-width: 200px;
+  word-break: break-all;
+}
+
+.share-buttons {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.btn-copy {
+  flex: 1;
+  padding: 0.625rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: white;
+  color: #667eea;
+}
+
+.btn-copy:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.btn-copy:active {
+  transform: translateY(0);
+}
+
+.share-hint {
+  font-size: 0.85rem;
+  color: #666;
+  margin: 0;
+  text-align: center;
+  font-style: italic;
 }
 
 .lobby-content {
@@ -182,6 +255,29 @@
   
   .lobby-card h1 {
     font-size: 2rem;
+  }
+  
+  .share-section {
+    padding: 1rem;
+  }
+  
+  .share-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .studio-id {
+    width: 100%;
+    min-width: auto;
+    font-size: 0.85rem;
+  }
+  
+  .share-buttons {
+    flex-direction: column;
+  }
+  
+  .btn-copy {
+    width: 100%;
   }
   
   .lobby-content {
