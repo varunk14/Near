@@ -32,6 +32,12 @@
   color: #333;
 }
 
+.header-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
 .btn-dashboard {
   padding: 0.75rem 1.5rem;
   background: #667eea;
@@ -47,6 +53,31 @@
   background: #5568d3;
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-login,
+.btn-logout {
+  padding: 0.75rem 1.5rem;
+  background: #f5f5f5;
+  color: #333;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  font-size: 0.95rem;
+}
+
+.btn-login:hover {
+  background: #e0e0e0;
+  transform: translateY(-1px);
+}
+
+.btn-logout:hover {
+  background: #fee;
+  border-color: #f44336;
+  color: #f44336;
 }
 
 .subtitle {

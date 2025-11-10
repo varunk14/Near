@@ -19,6 +19,30 @@ if (supabaseUrl && supabaseKey) {
   console.warn('Supabase credentials not found. Studio creation will not be saved to database.')
 }
 
+// Helper to verify auth token and get user
+const verifyAuth = async (req) => {
+  const authHeader = req.headers.authorization
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { user: null, error: 'No authorization token provided' }
+  }
+
+  const token = authHeader.substring(7)
+  
+  if (!supabase) {
+    return { user: null, error: 'Supabase not configured' }
+  }
+
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token)
+    if (error) {
+      return { user: null, error: error.message }
+    }
+    return { user, error: null }
+  } catch (error) {
+    return { user: null, error: error.message }
+  }
+}
+
 // Enable CORS for all routes
 const corsOptions = {
   origin: process.env.CORS_ORIGIN || '*',
@@ -204,7 +228,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', rooms: rooms.size })
 })
 
-// API: Create a new studio
+// API: Create a new studio (MVP 9: Requires authentication)
 app.post('/api/create-studio', async (req, res) => {
   try {
     const { name } = req.body
@@ -213,23 +237,31 @@ app.post('/api/create-studio', async (req, res) => {
       return res.status(400).json({ error: 'Studio name is required' })
     }
 
+    // Verify authentication
+    const { user, error: authError } = await verifyAuth(req)
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Authentication required. Please log in.' })
+    }
+
     if (!supabase) {
       // Fallback: generate UUID without database
       const studioId = `studio_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       return res.json({
         id: studioId,
         name: name.trim(),
+        user_id: user.id,
         created_at: new Date().toISOString(),
         message: 'Studio created (database not configured)'
       })
     }
 
-    // Insert into Supabase
+    // Insert into Supabase with user_id
     const { data, error } = await supabase
       .from('studios')
       .insert([
         {
-          name: name.trim()
+          name: name.trim(),
+          user_id: user.id
         }
       ])
       .select()
@@ -277,7 +309,7 @@ app.get('/api/studio/:id', async (req, res) => {
   }
 })
 
-// API: Create a new recording
+// API: Create a new recording (MVP 9: Links to studio owner)
 app.post('/api/recordings', async (req, res) => {
   try {
     const { studio_id, recording_id, user_id, user_name } = req.body
@@ -286,11 +318,29 @@ app.post('/api/recordings', async (req, res) => {
       return res.status(400).json({ error: 'Recording ID is required' })
     }
 
+    // Get authenticated user (optional - guests can record)
+    const { user } = await verifyAuth(req)
+    
+    // If studio_id provided, get the studio owner
+    let owner_id = null
+    if (studio_id && supabase) {
+      const { data: studio } = await supabase
+        .from('studios')
+        .select('user_id')
+        .eq('id', studio_id)
+        .single()
+      
+      if (studio) {
+        owner_id = studio.user_id
+      }
+    }
+
     if (!supabase) {
       return res.json({
         id: `rec_${Date.now()}`,
         recording_id,
         studio_id: studio_id || null,
+        owner_id: owner_id || null,
         user_id: user_id || null,
         user_name: user_name || null,
         file_paths: [],
@@ -306,6 +356,7 @@ app.post('/api/recordings', async (req, res) => {
         {
           studio_id: studio_id || null,
           recording_id,
+          owner_id: owner_id || null,
           user_id: user_id || null,
           user_name: user_name || null,
           file_paths: [],
@@ -391,10 +442,16 @@ app.patch('/api/recordings/:recording_id', async (req, res) => {
   }
 })
 
-// API: Get all recordings
+// API: Get all recordings (MVP 9: Only shows user's recordings)
 app.get('/api/recordings', async (req, res) => {
   try {
     const { studio_id } = req.query
+
+    // Verify authentication
+    const { user, error: authError } = await verifyAuth(req)
+    if (authError || !user) {
+      return res.status(401).json({ error: 'Authentication required. Please log in.' })
+    }
 
     if (!supabase) {
       return res.json({
@@ -412,6 +469,7 @@ app.get('/api/recordings', async (req, res) => {
           name
         )
       `)
+      .eq('owner_id', user.id) // Only show recordings from studios owned by the user
       .order('created_at', { ascending: false })
 
     // Filter by studio_id if provided

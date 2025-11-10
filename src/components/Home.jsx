@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 import { createStudio } from '../utils/api'
+import Auth from './Auth'
 import './Home.css'
 
 function Home() {
@@ -8,7 +10,9 @@ function Home() {
   const [studioName, setStudioName] = useState('')
   const [isCreatingStudio, setIsCreatingStudio] = useState(false)
   const [error, setError] = useState(null)
+  const [showAuth, setShowAuth] = useState(false)
   const navigate = useNavigate()
+  const { user, signOut } = useAuth()
 
   const handleCreateRoom = () => {
     // Generate a random room ID
@@ -23,6 +27,12 @@ function Home() {
   }
 
   const handleCreateStudio = async () => {
+    // Require authentication
+    if (!user) {
+      setShowAuth(true)
+      return
+    }
+
     setIsCreatingStudio(true)
     setError(null)
     
@@ -48,10 +58,25 @@ function Home() {
             <h1>Near</h1>
             <p className="subtitle">Studio Quality Recording & Live Chat</p>
           </div>
-          <Link to="/dashboard" className="btn-dashboard">
-            📊 Dashboard
-          </Link>
+          <div className="header-actions">
+            {user ? (
+              <>
+                <Link to="/dashboard" className="btn-dashboard">
+                  📊 Dashboard
+                </Link>
+                <button onClick={signOut} className="btn-logout">
+                  Log Out
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setShowAuth(true)} className="btn-login">
+                Log In
+              </button>
+            )}
+          </div>
         </div>
+
+        {showAuth && <Auth onClose={() => setShowAuth(false)} />}
 
         <div className="options">
           <div className="option-card">

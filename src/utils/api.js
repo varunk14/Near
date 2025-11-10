@@ -33,13 +33,32 @@ const getApiUrl = () => {
 
 const API_URL = getApiUrl()
 
+// Helper to get auth token
+const getAuthToken = async () => {
+  const { supabase } = await import('./supabase')
+  if (!supabase) return null
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.access_token || null
+}
+
+// Helper to create headers with auth
+const getAuthHeaders = async () => {
+  const token = await getAuthToken()
+  const headers = {
+    'Content-Type': 'application/json',
+  }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  return headers
+}
+
 export async function createStudio(name) {
   try {
+    const headers = await getAuthHeaders()
     const response = await fetch(`${API_URL}/api/create-studio`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({ name }),
     })
 
@@ -76,11 +95,10 @@ export async function getStudio(id) {
 
 export async function createRecording(studio_id, recording_id, user_id, user_name) {
   try {
+    const headers = await getAuthHeaders()
     const response = await fetch(`${API_URL}/api/recordings`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         studio_id,
         recording_id,
@@ -129,11 +147,12 @@ export async function updateRecording(recording_id, file_path, status, completed
 
 export async function getRecordings(studio_id = null) {
   try {
+    const headers = await getAuthHeaders()
     const url = studio_id 
       ? `${API_URL}/api/recordings?studio_id=${studio_id}`
       : `${API_URL}/api/recordings`
     
-    const response = await fetch(url)
+    const response = await fetch(url, { headers })
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))

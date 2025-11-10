@@ -5,6 +5,7 @@ import LiveChat from './components/LiveChat'
 import DualStream from './components/DualStream'
 import Lobby from './components/Lobby'
 import Dashboard from './components/Dashboard'
+import ProtectedRoute from './components/ProtectedRoute'
 import './App.css'
 
 function App() {
@@ -17,7 +18,14 @@ function App() {
           <Route path="/chat/:roomId" element={<LiveChat />} />
           <Route path="/studio/:roomId/lobby" element={<Lobby />} />
           <Route path="/studio/:roomId" element={<DualStream />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route 
+            path="/dashboard" 
+            element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
         </Routes>
       </div>
     </Router>
