@@ -55,12 +55,18 @@ To allow direct browser uploads to Cloudflare R2, you need to configure CORS on 
 
 When you deploy to Vercel, you'll need to add your production domain to the `AllowedOrigins` array:
 
+**IMPORTANT:** Replace `https://your-app.vercel.app` with your actual Vercel domain (e.g., `https://near-henna.vercel.app`)
+
 ```json
 [
   {
     "AllowedOrigins": [
       "http://localhost:5173",
-      "https://your-app.vercel.app"
+      "http://localhost:3000",
+      "http://127.0.0.1:5173",
+      "http://127.0.0.1:3000",
+      "https://near-henna.vercel.app",
+      "https://*.vercel.app"
     ],
     "AllowedMethods": [
       "GET",
