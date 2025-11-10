@@ -66,9 +66,21 @@ function LiveChat() {
       })
 
       localStreamRef.current = stream
+      
+      // Ensure all tracks are enabled
+      stream.getTracks().forEach(track => {
+        track.enabled = true
+        console.log(`Track enabled: ${track.kind} - ${track.enabled ? 'enabled' : 'disabled'}`)
+      })
+      
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream
       }
+
+      console.log('Local stream initialized with tracks:', {
+        video: stream.getVideoTracks().length,
+        audio: stream.getAudioTracks().length
+      })
 
       // Connect to signaling server
       await connectWebSocket()
@@ -173,16 +185,75 @@ function LiveChat() {
     }
   }
 
+  const addLocalTracksToPeerConnection = (pc) => {
+    if (!localStreamRef.current || !pc) {
+      console.warn('Cannot add tracks: stream or peer connection not available')
+      return
+    }
+    
+    // Check if tracks are already added
+    const existingSenders = pc.getSenders()
+    const hasVideoTrack = existingSenders.some(sender => 
+      sender.track && sender.track.kind === 'video' && sender.track.enabled
+    )
+    const hasAudioTrack = existingSenders.some(sender => 
+      sender.track && sender.track.kind === 'audio' && sender.track.enabled
+    )
+    
+    console.log('Current senders:', {
+      total: existingSenders.length,
+      hasVideo: hasVideoTrack,
+      hasAudio: hasAudioTrack
+    })
+    
+    // Add video track if not already added
+    if (!hasVideoTrack) {
+      const videoTrack = localStreamRef.current.getVideoTracks()[0]
+      if (videoTrack && videoTrack.enabled) {
+        try {
+          pc.addTrack(videoTrack, localStreamRef.current)
+          console.log('✅ Added video track to peer connection')
+        } catch (error) {
+          console.error('Error adding video track:', error)
+        }
+      } else {
+        console.warn('Video track not available or disabled')
+      }
+    } else {
+      console.log('Video track already added')
+    }
+    
+    // Add audio track if not already added
+    if (!hasAudioTrack) {
+      const audioTrack = localStreamRef.current.getAudioTracks()[0]
+      if (audioTrack && audioTrack.enabled) {
+        try {
+          pc.addTrack(audioTrack, localStreamRef.current)
+          console.log('✅ Added audio track to peer connection')
+        } catch (error) {
+          console.error('Error adding audio track:', error)
+        }
+      } else {
+        console.warn('Audio track not available or disabled')
+      }
+    } else {
+      console.log('Audio track already added')
+    }
+    
+    // Verify tracks were added
+    const finalSenders = pc.getSenders()
+    console.log('Final senders after adding tracks:', {
+      total: finalSenders.length,
+      tracks: finalSenders.map(s => s.track ? `${s.track.kind} (${s.track.enabled ? 'enabled' : 'disabled'})` : 'null')
+    })
+  }
+
   const createPeerConnection = () => {
     const pc = new RTCPeerConnection(rtcConfig)
     peerConnectionRef.current = pc
 
     // Add local stream tracks
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => {
-        pc.addTrack(track, localStreamRef.current)
-      })
-    }
+    addLocalTracksToPeerConnection(pc)
 
     // Handle remote stream
     pc.ontrack = (event) => {
@@ -220,6 +291,9 @@ function LiveChat() {
     try {
       const pc = peerConnectionRef.current
       
+      // Ensure local tracks are added before creating offer
+      addLocalTracksToPeerConnection(pc)
+      
       // Only create offer if we're in stable state (no active negotiation)
       if (pc.signalingState !== 'stable') {
         console.log('Cannot create offer, connection state:', pc.signalingState)
@@ -248,6 +322,9 @@ function LiveChat() {
 
     try {
       const pc = peerConnectionRef.current
+      
+      // Ensure local tracks are added before handling offer
+      addLocalTracksToPeerConnection(pc)
       
       // Only handle offer if we're in stable state (no active negotiation)
       if (pc.signalingState === 'stable') {
