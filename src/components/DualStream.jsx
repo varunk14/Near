@@ -212,7 +212,26 @@ function DualStream() {
       // Connect to signaling server
       await connectWebSocket()
     } catch (err) {
-      setError(`Error accessing media devices: ${err.message}`)
+      // Provide better error messages
+      let errorMessage = 'Error accessing media devices'
+      
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        errorMessage = 'Camera/microphone permission denied. Please allow access in your browser settings.'
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        errorMessage = 'No camera or microphone found. Please connect a device and try again.'
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        errorMessage = 'Camera or microphone is already in use by another application.'
+      } else if (err.name === 'OverconstrainedError') {
+        errorMessage = 'Your device does not support the requested video/audio settings.'
+      } else if (err.message) {
+        errorMessage = `Error accessing media devices: ${err.message}`
+      } else if (err.name) {
+        errorMessage = `Error accessing media devices: ${err.name}`
+      } else {
+        errorMessage = 'Unable to access camera or microphone. Please check your device permissions.'
+      }
+      
+      setError(errorMessage)
       console.error('Error accessing media devices:', err)
     }
   }
@@ -326,10 +345,10 @@ function DualStream() {
         default:
           console.log('Unknown message type:', data.type)
       }
-    } catch (error) {
-      console.error('Error handling signaling message:', error)
-      setError(`Error: ${error.message}`)
-    }
+      } catch (error) {
+        console.error('Error handling signaling message:', error)
+        setError(`Error: ${error.message || error.name || 'Unknown error occurred'}`)
+      }
   }
 
   const addLocalTracksToPeerConnection = (pc) => {
@@ -463,7 +482,7 @@ function DualStream() {
       }))
     } catch (error) {
       console.error(`Error creating offer for ${targetUserId}:`, error)
-      setError(`Error creating offer: ${error.message}`)
+      setError(`Error creating offer: ${error.message || error.name || 'Unknown error'}`)
     }
   }
 
@@ -492,7 +511,7 @@ function DualStream() {
       }
     } catch (error) {
       console.error(`Error handling offer from ${fromUserId}:`, error)
-      setError(`Error handling offer: ${error.message}`)
+      setError(`Error handling offer: ${error.message || error.name || 'Unknown error'}`)
     }
   }
 
@@ -627,7 +646,7 @@ function DualStream() {
       setUploadStatus('Recording started. Chunks uploading every 10 seconds...')
       setError(null)
     } catch (err) {
-      setError(`Error starting recording: ${err.message}`)
+      setError(`Error starting recording: ${err.message || err.name || 'Unknown error'}`)
       console.error('Error starting recording:', err)
     }
   }
@@ -667,7 +686,7 @@ function DualStream() {
       console.log(`Successfully uploaded chunk ${chunkNumber}: ${chunkFilename}`)
     } catch (err) {
       console.error(`Error uploading chunk ${chunkNumber}:`, err)
-      setError(`Failed to upload chunk ${chunkNumber + 1}: ${err.message}`)
+      setError(`Failed to upload chunk ${chunkNumber + 1}: ${err.message || err.name || 'Unknown error'}`)
     } finally {
       pendingUploadsRef.current.delete(uploadId)
       if (pendingUploadsRef.current.size === 0 && !isRecording) {
