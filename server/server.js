@@ -56,28 +56,34 @@ wss.on('connection', (ws, req) => {
           rooms.get(currentRoom).add(ws)
           
           ws.userId = userId
+          ws.userName = data.userName || null
           ws.roomId = currentRoom
           
-          // Get list of existing users in the room (for mesh connection)
+          // Get list of existing users in the room (for mesh connection) with their names
           const existingUsers = Array.from(rooms.get(currentRoom))
             .filter(client => client !== ws && client.userId)
-            .map(client => client.userId)
+            .map(client => ({
+              userId: client.userId,
+              userName: client.userName || null
+            }))
           
-          // Send confirmation with list of existing users
+          // Send confirmation with list of existing users (with names)
           ws.send(JSON.stringify({
             type: 'joined',
             userId,
             roomId: currentRoom,
-            existingUsers: existingUsers
+            existingUsers: existingUsers.map(u => u.userId),
+            existingUsersWithNames: existingUsers // Include names for display
           }))
 
-          // Notify other users in the room about the new user
+          // Notify other users in the room about the new user (with name)
           broadcastToRoom(currentRoom, ws, {
             type: 'user-joined',
-            userId
+            userId,
+            userName: data.userName || null
           })
           
-          console.log(`User ${userId} joined room ${currentRoom}. Existing users: ${existingUsers.length}`)
+          console.log(`User ${userId} (${data.userName || 'unnamed'}) joined room ${currentRoom}. Existing users: ${existingUsers.length}`)
           break
 
         case 'offer':

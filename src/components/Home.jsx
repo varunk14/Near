@@ -30,8 +30,8 @@ function Home() {
       const name = studioName.trim() || `Studio ${new Date().toLocaleString()}`
       const studio = await createStudio(name)
       
-      // Navigate to the studio using the database ID
-      navigate(`/studio/${studio.id}`)
+      // Navigate to the lobby first (Green Room)
+      navigate(`/studio/${studio.id}/lobby`)
     } catch (err) {
       setError(err.message || 'Failed to create studio')
       console.error('Error creating studio:', err)
@@ -125,7 +125,7 @@ function Home() {
                 />
                 <button 
                   className="btn btn-secondary"
-                  onClick={() => roomId.trim() && navigate(`/studio/${roomId.trim()}`)}
+                  onClick={() => roomId.trim() && navigate(`/studio/${roomId.trim()}/lobby`)}
                   disabled={!roomId.trim()}
                 >
                   Join Studio

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { uploadToR2 } from '../utils/r2Upload'
 import { getStudio } from '../utils/api'
 import './DualStream.css'
@@ -27,7 +27,7 @@ const getWebSocketUrl = () => {
 const WS_URL = getWebSocketUrl()
 
 // Remote Video Component
-function RemoteVideo({ userId, stream, connectionState }) {
+function RemoteVideo({ userId, stream, connectionState, userName }) {
   const videoRef = useRef(null)
 
   useEffect(() => {
@@ -47,7 +47,7 @@ function RemoteVideo({ userId, stream, connectionState }) {
             className="video-preview remote-video"
           />
           <div className="video-label">
-            User {userId.substring(0, 8)}
+            {userName || `User ${userId.substring(0, 8)}`}
             {connectionState && connectionState !== 'connected' && (
               <span className="connection-badge">{connectionState}</span>
             )}
@@ -55,7 +55,7 @@ function RemoteVideo({ userId, stream, connectionState }) {
         </>
       ) : (
         <div className="waiting-message">
-          <p>Connecting to {userId.substring(0, 8)}...</p>
+          <p>Connecting to {userName || userId.substring(0, 8)}...</p>
         </div>
       )}
     </div>
@@ -64,14 +64,16 @@ function RemoteVideo({ userId, stream, connectionState }) {
 
 function DualStream() {
   const { roomId } = useParams()
+  const [searchParams] = useSearchParams()
   const [isConnected, setIsConnected] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadStatus, setUploadStatus] = useState('')
   const [error, setError] = useState(null)
-  const [remoteUsers, setRemoteUsers] = useState(new Map()) // userId -> { stream, connectionState }
+  const [remoteUsers, setRemoteUsers] = useState(new Map()) // userId -> { stream, connectionState, name }
   const [uploadedChunks, setUploadedChunks] = useState(0)
   const [studioName, setStudioName] = useState(null)
+  const [userName, setUserName] = useState('')
   
   const localVideoRef = useRef(null)
   const wsRef = useRef(null)
@@ -105,6 +107,15 @@ function DualStream() {
   }
 
   useEffect(() => {
+    // Get device IDs and name from URL params (from lobby)
+    const cameraId = searchParams.get('camera')
+    const micId = searchParams.get('mic')
+    const name = searchParams.get('name')
+    
+    if (name) {
+      setUserName(name)
+    }
+
     // Fetch studio information
     const fetchStudio = async () => {
       if (roomId) {
@@ -121,27 +132,40 @@ function DualStream() {
     }
 
     fetchStudio()
-    initializeConnection()
+    initializeConnection(cameraId, micId)
 
     return () => {
       cleanup()
     }
-  }, [roomId])
+  }, [roomId, searchParams])
 
-  const initializeConnection = async () => {
+  const initializeConnection = async (cameraId, micId) => {
     try {
-      // Get high-quality stream for recording
+      // Build constraints with selected devices (from lobby)
+      const videoConstraints = {
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30 }
+      }
+      
+      const audioConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        sampleRate: 48000
+      }
+      
+      // Use selected device IDs if provided
+      if (cameraId) {
+        videoConstraints.deviceId = { exact: cameraId }
+      }
+      if (micId) {
+        audioConstraints.deviceId = { exact: micId }
+      }
+      
+      // Get high-quality stream for recording with selected devices
       const highQualityStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30 }
-        },
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 48000
-        }
+        video: videoConstraints,
+        audio: audioConstraints
       })
 
       localStreamRef.current = highQualityStream
@@ -188,7 +212,8 @@ function DualStream() {
         ws.send(JSON.stringify({
           type: 'join-room',
           roomId: roomId || 'default',
-          userId: userIdRef.current
+          userId: userIdRef.current,
+          userName: userName || null
         }))
         
         resolve()
@@ -222,15 +247,37 @@ function DualStream() {
             for (const existingUserId of data.existingUsers) {
               await createPeerConnectionForUser(existingUserId)
               await createOfferForUser(existingUserId)
+              
+              // Store user names if provided
+              if (data.existingUsersWithNames) {
+                const userInfo = data.existingUsersWithNames.find(u => u.userId === existingUserId)
+                if (userInfo && userInfo.userName) {
+                  setRemoteUsers(prev => {
+                    const newMap = new Map(prev)
+                    const existing = newMap.get(existingUserId) || {}
+                    newMap.set(existingUserId, { ...existing, name: userInfo.userName })
+                    return newMap
+                  })
+                }
+              }
             }
           }
           break
 
         case 'user-joined':
-          console.log('User joined:', data.userId)
+          console.log('User joined:', data.userId, data.userName || 'unnamed')
           // Create peer connection for the new user
           await createPeerConnectionForUser(data.userId)
           await createOfferForUser(data.userId)
+          // Store user name
+          if (data.userName) {
+            setRemoteUsers(prev => {
+              const newMap = new Map(prev)
+              const existing = newMap.get(data.userId) || {}
+              newMap.set(data.userId, { ...existing, name: data.userName })
+              return newMap
+            })
+          }
           break
 
         case 'offer':
@@ -630,7 +677,9 @@ function DualStream() {
             muted
             className="video-preview local-video"
           />
-          <div className="video-label">You (High Quality)</div>
+          <div className="video-label">
+            {userName || 'You'} (High Quality)
+          </div>
         </div>
 
         {Array.from(remoteUsers.entries()).map(([userId, userData]) => (
@@ -639,6 +688,7 @@ function DualStream() {
             userId={userId}
             stream={userData.stream}
             connectionState={userData.connectionState}
+            userName={userData.name}
           />
         ))}
 
