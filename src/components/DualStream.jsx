@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { uploadToR2 } from '../utils/r2Upload'
+import { getStudio } from '../utils/api'
 import './DualStream.css'
 
 // Get WebSocket URL from environment or use default
@@ -34,6 +35,7 @@ function DualStream() {
   const [error, setError] = useState(null)
   const [remoteUserId, setRemoteUserId] = useState(null)
   const [uploadedChunks, setUploadedChunks] = useState(0)
+  const [studioName, setStudioName] = useState(null)
   
   const localVideoRef = useRef(null)
   const remoteVideoRef = useRef(null)
@@ -57,6 +59,22 @@ function DualStream() {
   }
 
   useEffect(() => {
+    // Fetch studio information
+    const fetchStudio = async () => {
+      if (roomId) {
+        try {
+          const studio = await getStudio(roomId)
+          if (studio) {
+            setStudioName(studio.name)
+          }
+        } catch (err) {
+          console.warn('Could not fetch studio info:', err)
+          // Continue anyway - studio might not exist in DB yet
+        }
+      }
+    }
+
+    fetchStudio()
     initializeConnection()
 
     return () => {
@@ -476,7 +494,10 @@ function DualStream() {
   return (
     <div className="dual-stream-container">
       <div className="chat-header">
-        <h2>Near Studio - Room: {roomId || 'default'}</h2>
+        <h2>
+          {studioName ? studioName : 'Near Studio'} 
+          {roomId && <span className="room-id">({roomId.substring(0, 8)}...)</span>}
+        </h2>
         <div className="header-controls">
           <div className="connection-status">
             <span className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`}></span>

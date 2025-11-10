@@ -2,9 +2,22 @@ import express from 'express'
 import { WebSocketServer } from 'ws'
 import http from 'http'
 import cors from 'cors'
+import { createClient } from '@supabase/supabase-js'
 
 const app = express()
 const server = http.createServer(app)
+
+// Initialize Supabase client
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseKey = process.env.SUPABASE_ANON_KEY
+
+let supabase = null
+if (supabaseUrl && supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey)
+  console.log('Supabase client initialized')
+} else {
+  console.warn('Supabase credentials not found. Studio creation will not be saved to database.')
+}
 
 // Enable CORS for all routes
 const corsOptions = {
@@ -138,6 +151,79 @@ function broadcastToRoom(roomId, sender, message) {
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', rooms: rooms.size })
+})
+
+// API: Create a new studio
+app.post('/api/create-studio', async (req, res) => {
+  try {
+    const { name } = req.body
+    
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ error: 'Studio name is required' })
+    }
+
+    if (!supabase) {
+      // Fallback: generate UUID without database
+      const studioId = `studio_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      return res.json({
+        id: studioId,
+        name: name.trim(),
+        created_at: new Date().toISOString(),
+        message: 'Studio created (database not configured)'
+      })
+    }
+
+    // Insert into Supabase
+    const { data, error } = await supabase
+      .from('studios')
+      .insert([
+        {
+          name: name.trim()
+        }
+      ])
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error creating studio:', error)
+      return res.status(500).json({ error: 'Failed to create studio', details: error.message })
+    }
+
+    res.json(data)
+  } catch (error) {
+    console.error('Error in create-studio endpoint:', error)
+    res.status(500).json({ error: 'Internal server error', details: error.message })
+  }
+})
+
+// API: Get studio by ID
+app.get('/api/studio/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    if (!supabase) {
+      return res.status(404).json({ error: 'Database not configured' })
+    }
+
+    const { data, error } = await supabase
+      .from('studios')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ error: 'Studio not found' })
+      }
+      console.error('Error fetching studio:', error)
+      return res.status(500).json({ error: 'Failed to fetch studio', details: error.message })
+    }
+
+    res.json(data)
+  } catch (error) {
+    console.error('Error in get-studio endpoint:', error)
+    res.status(500).json({ error: 'Internal server error', details: error.message })
+  }
 })
 
 const PORT = process.env.PORT || 3001

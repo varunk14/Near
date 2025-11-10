@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { createStudio } from '../utils/api'
 import './Home.css'
 
 function Home() {
   const [roomId, setRoomId] = useState('')
+  const [studioName, setStudioName] = useState('')
+  const [isCreatingStudio, setIsCreatingStudio] = useState(false)
+  const [error, setError] = useState(null)
   const navigate = useNavigate()
 
   const handleCreateRoom = () => {
@@ -15,6 +19,24 @@ function Home() {
   const handleJoinRoom = () => {
     if (roomId.trim()) {
       navigate(`/chat/${roomId.trim()}`)
+    }
+  }
+
+  const handleCreateStudio = async () => {
+    setIsCreatingStudio(true)
+    setError(null)
+    
+    try {
+      const name = studioName.trim() || `Studio ${new Date().toLocaleString()}`
+      const studio = await createStudio(name)
+      
+      // Navigate to the studio using the database ID
+      navigate(`/studio/${studio.id}`)
+    } catch (err) {
+      setError(err.message || 'Failed to create studio')
+      console.error('Error creating studio:', err)
+    } finally {
+      setIsCreatingStudio(false)
     }
   }
 
@@ -70,19 +92,32 @@ function Home() {
             <h2>🎬 Near Studio (Dual Stream)</h2>
             <p>Live video chat + High-quality recording simultaneously</p>
             <div className="chat-actions">
-              <button 
-                className="btn btn-primary"
-                onClick={() => {
-                  const newRoomId = `room_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-                  navigate(`/studio/${newRoomId}`)
-                }}
-              >
-                Create Studio
-              </button>
+              <div className="create-studio-section">
+                <input
+                  type="text"
+                  placeholder="Enter studio name (optional)"
+                  value={studioName}
+                  onChange={(e) => setStudioName(e.target.value)}
+                  className="room-input"
+                  onKeyPress={(e) => e.key === 'Enter' && !isCreatingStudio && handleCreateStudio()}
+                />
+                <button 
+                  className="btn btn-primary"
+                  onClick={handleCreateStudio}
+                  disabled={isCreatingStudio}
+                >
+                  {isCreatingStudio ? 'Creating...' : 'Create Studio'}
+                </button>
+              </div>
+              {error && (
+                <div className="error-message" style={{ color: '#f44336', fontSize: '0.85rem', marginTop: '0.5rem' }}>
+                  {error}
+                </div>
+              )}
               <div className="join-section">
                 <input
                   type="text"
-                  placeholder="Enter studio room ID"
+                  placeholder="Enter studio ID to join"
                   value={roomId}
                   onChange={(e) => setRoomId(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && roomId.trim() && navigate(`/studio/${roomId.trim()}`)}
