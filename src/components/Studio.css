@@ -126,3 +126,65 @@
   border: 1px solid #bee5eb;
 }
 
+@media (max-width: 768px) {
+  .studio-container {
+    padding: 1.5rem;
+    border-radius: 12px;
+  }
+  
+  .video-wrapper {
+    margin-bottom: 1rem;
+    border-radius: 8px;
+  }
+  
+  .recording-indicator {
+    top: 0.5rem;
+    left: 0.5rem;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+  }
+  
+  .recording-dot {
+    width: 10px;
+    height: 10px;
+  }
+  
+  .controls {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .btn {
+    width: 100%;
+    padding: 0.875rem 1.5rem;
+    font-size: 1rem;
+  }
+  
+  .status {
+    padding: 0.875rem;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .studio-container {
+    padding: 1rem;
+    margin: 0 5px;
+  }
+  
+  .recording-indicator {
+    font-size: 0.75rem;
+    padding: 0.3rem 0.6rem;
+  }
+  
+  .btn {
+    padding: 0.75rem 1.25rem;
+    font-size: 0.9rem;
+  }
+  
+  .status {
+    padding: 0.75rem;
+    font-size: 0.85rem;
+  }
+}
+

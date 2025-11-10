@@ -125,14 +125,86 @@
 }
 
 @media (max-width: 768px) {
-  .video-grid {
-    grid-template-columns: 1fr;
+  .live-chat-container {
+    padding: 1.5rem;
+    border-radius: 12px;
   }
   
   .chat-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+  }
+  
+  .chat-header h2 {
+    font-size: 1.25rem;
+  }
+  
+  .connection-status {
+    font-size: 0.85rem;
+  }
+  
+  .video-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .video-label {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.6rem;
+  }
+  
+  .waiting-message p {
+    font-size: 1rem;
+    padding: 1rem;
+  }
+  
+  .status {
+    padding: 0.875rem;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .live-chat-container {
+    padding: 1rem;
+    margin: 0 5px;
+  }
+  
+  .chat-header h2 {
+    font-size: 1.1rem;
+  }
+  
+  .connection-status {
+    font-size: 0.8rem;
+  }
+  
+  .video-grid {
+    gap: 0.75rem;
+  }
+  
+  .video-wrapper {
+    border-radius: 8px;
+  }
+  
+  .video-label {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+    bottom: 0.25rem;
+    left: 0.25rem;
+  }
+  
+  .waiting-message p {
+    font-size: 0.9rem;
+    padding: 0.75rem;
+  }
+  
+  .status {
+    padding: 0.75rem;
+    font-size: 0.85rem;
   }
 }
 

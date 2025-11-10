@@ -15,11 +15,24 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
+  margin: 0;
 }
 
 #root {
   width: 100%;
   max-width: 1200px;
-  padding: 20px;
+  padding: 10px;
+}
+
+@media (max-width: 768px) {
+  #root {
+    padding: 5px;
+  }
+  
+  body {
+    align-items: flex-start;
+    padding-top: 10px;
+  }
 }
 
