@@ -16,6 +16,30 @@ function Lobby() {
   
   const videoRef = useRef(null)
 
+  const updatePreview = async () => {
+    try {
+      // Stop existing preview
+      if (previewStream) {
+        previewStream.getTracks().forEach(track => track.stop())
+      }
+
+      const constraints = {
+        video: selectedCamera ? { deviceId: { exact: selectedCamera } } : true,
+        audio: selectedMicrophone ? { deviceId: { exact: selectedMicrophone } } : true
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      setPreviewStream(stream)
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+      }
+    } catch (err) {
+      console.error('Error updating preview:', err)
+      setError(`Error previewing device: ${err.message}`)
+    }
+  }
+
   useEffect(() => {
     enumerateDevices()
     return () => {
@@ -66,30 +90,6 @@ function Lobby() {
       setError(`Error accessing devices: ${err.message}`)
       setIsLoading(false)
       console.error('Error enumerating devices:', err)
-    }
-  }
-
-  const updatePreview = async () => {
-    try {
-      // Stop existing preview
-      if (previewStream) {
-        previewStream.getTracks().forEach(track => track.stop())
-      }
-
-      const constraints = {
-        video: selectedCamera ? { deviceId: { exact: selectedCamera } } : true,
-        audio: selectedMicrophone ? { deviceId: { exact: selectedMicrophone } } : true
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints)
-      setPreviewStream(stream)
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-      }
-    } catch (err) {
-      console.error('Error updating preview:', err)
-      setError(`Error previewing device: ${err.message}`)
     }
   }
 
