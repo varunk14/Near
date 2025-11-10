@@ -44,9 +44,19 @@ This guide will help you set up Supabase for MVP 5: Dynamic Studios.
 
 1. **Test the API endpoint:**
    ```bash
+   # Replace 'your-render-url.onrender.com' with your actual Render service URL
    curl -X POST https://your-render-url.onrender.com/api/create-studio \
      -H "Content-Type: application/json" \
      -d '{"name":"Test Studio"}'
+   ```
+   
+   **Expected response:**
+   ```json
+   {
+     "id": "123e4567-e89b-12d3-a456-426614174000",
+     "name": "Test Studio",
+     "created_at": "2024-01-01T00:00:00.000Z"
+   }
    ```
    
    You should get a response with a studio ID.

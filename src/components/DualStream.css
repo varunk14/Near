@@ -59,6 +59,17 @@
   background: #f44336;
 }
 
+.user-count {
+  display: flex;
+  align-items: center;
+  background: rgba(102, 126, 234, 0.1);
+  color: #667eea;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
 .recording-badge {
   display: flex;
   align-items: center;
@@ -89,9 +100,23 @@
 
 .video-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1.5rem;
   margin-bottom: 1.5rem;
+}
+
+/* Ensure at least 2 columns when there are multiple users */
+@media (min-width: 768px) {
+  .video-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* 3 columns for 3+ users on larger screens */
+@media (min-width: 1200px) {
+  .video-grid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
 }
 
 .video-wrapper {
@@ -123,6 +148,17 @@
   border-radius: 4px;
   font-size: 0.85rem;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.connection-badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.4rem;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  font-weight: normal;
 }
 
 .waiting-message {
@@ -137,6 +173,12 @@
 .waiting-message p {
   font-size: 1.1rem;
   text-align: center;
+  margin: 0.5rem 0;
+}
+
+.waiting-subtitle {
+  font-size: 0.9rem !important;
+  color: #999 !important;
 }
 
 .controls-section {

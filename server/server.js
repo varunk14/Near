@@ -58,47 +58,80 @@ wss.on('connection', (ws, req) => {
           ws.userId = userId
           ws.roomId = currentRoom
           
-          // Send confirmation
+          // Get list of existing users in the room (for mesh connection)
+          const existingUsers = Array.from(rooms.get(currentRoom))
+            .filter(client => client !== ws && client.userId)
+            .map(client => client.userId)
+          
+          // Send confirmation with list of existing users
           ws.send(JSON.stringify({
             type: 'joined',
             userId,
-            roomId: currentRoom
+            roomId: currentRoom,
+            existingUsers: existingUsers
           }))
 
-          // Notify other users in the room
+          // Notify other users in the room about the new user
           broadcastToRoom(currentRoom, ws, {
             type: 'user-joined',
             userId
           })
           
-          console.log(`User ${userId} joined room ${currentRoom}`)
+          console.log(`User ${userId} joined room ${currentRoom}. Existing users: ${existingUsers.length}`)
           break
 
         case 'offer':
-          // Relay offer to other users in the room
-          broadcastToRoom(currentRoom, ws, {
-            type: 'offer',
-            offer: data.offer,
-            from: userId
-          })
+          // Relay offer to specific target user (for mesh architecture)
+          if (data.to) {
+            sendToUser(currentRoom, data.to, {
+              type: 'offer',
+              offer: data.offer,
+              from: userId
+            })
+          } else {
+            // Fallback: broadcast to all (for backward compatibility)
+            broadcastToRoom(currentRoom, ws, {
+              type: 'offer',
+              offer: data.offer,
+              from: userId
+            })
+          }
           break
 
         case 'answer':
-          // Relay answer to other users in the room
-          broadcastToRoom(currentRoom, ws, {
-            type: 'answer',
-            answer: data.answer,
-            from: userId
-          })
+          // Relay answer to specific target user (for mesh architecture)
+          if (data.to) {
+            sendToUser(currentRoom, data.to, {
+              type: 'answer',
+              answer: data.answer,
+              from: userId
+            })
+          } else {
+            // Fallback: broadcast to all
+            broadcastToRoom(currentRoom, ws, {
+              type: 'answer',
+              answer: data.answer,
+              from: userId
+            })
+          }
           break
 
         case 'ice-candidate':
-          // Relay ICE candidate to other users in the room
-          broadcastToRoom(currentRoom, ws, {
-            type: 'ice-candidate',
-            candidate: data.candidate,
-            from: userId
-          })
+          // Relay ICE candidate to specific target user (for mesh architecture)
+          if (data.to) {
+            sendToUser(currentRoom, data.to, {
+              type: 'ice-candidate',
+              candidate: data.candidate,
+              from: userId
+            })
+          } else {
+            // Fallback: broadcast to all
+            broadcastToRoom(currentRoom, ws, {
+              type: 'ice-candidate',
+              candidate: data.candidate,
+              from: userId
+            })
+          }
           break
 
         default:
@@ -143,6 +176,18 @@ function broadcastToRoom(roomId, sender, message) {
   const room = rooms.get(roomId)
   room.forEach((client) => {
     if (client !== sender && client.readyState === 1) { // 1 = OPEN
+      client.send(JSON.stringify(message))
+    }
+  })
+}
+
+// Helper function to send message to a specific user in a room
+function sendToUser(roomId, targetUserId, message) {
+  if (!rooms.has(roomId)) return
+
+  const room = rooms.get(roomId)
+  room.forEach((client) => {
+    if (client.userId === targetUserId && client.readyState === 1) { // 1 = OPEN
       client.send(JSON.stringify(message))
     }
   })

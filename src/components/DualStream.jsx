@@ -26,6 +26,42 @@ const getWebSocketUrl = () => {
 
 const WS_URL = getWebSocketUrl()
 
+// Remote Video Component
+function RemoteVideo({ userId, stream, connectionState }) {
+  const videoRef = useRef(null)
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream
+    }
+  }, [stream])
+
+  return (
+    <div className="video-wrapper">
+      {stream ? (
+        <>
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            className="video-preview remote-video"
+          />
+          <div className="video-label">
+            User {userId.substring(0, 8)}
+            {connectionState && connectionState !== 'connected' && (
+              <span className="connection-badge">{connectionState}</span>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="waiting-message">
+          <p>Connecting to {userId.substring(0, 8)}...</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DualStream() {
   const { roomId } = useParams()
   const [isConnected, setIsConnected] = useState(false)
@@ -33,14 +69,14 @@ function DualStream() {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadStatus, setUploadStatus] = useState('')
   const [error, setError] = useState(null)
-  const [remoteUserId, setRemoteUserId] = useState(null)
+  const [remoteUsers, setRemoteUsers] = useState(new Map()) // userId -> { stream, connectionState }
   const [uploadedChunks, setUploadedChunks] = useState(0)
   const [studioName, setStudioName] = useState(null)
   
   const localVideoRef = useRef(null)
-  const remoteVideoRef = useRef(null)
   const wsRef = useRef(null)
-  const peerConnectionRef = useRef(null)
+  const peerConnectionsRef = useRef(new Map()) // userId -> RTCPeerConnection
+  const remoteStreamsRef = useRef(new Map()) // userId -> MediaStream
   const localStreamRef = useRef(null) // High-quality stream for recording
   const webRTCStreamRef = useRef(null) // Lower-quality stream for WebRTC
   const userIdRef = useRef(null)
@@ -50,11 +86,21 @@ function DualStream() {
   const pendingUploadsRef = useRef(new Set())
   const uploadedChunksCountRef = useRef(0)
 
-  // WebRTC configuration
+  // WebRTC configuration with TURN servers (Open Relay Project - free tier)
   const rtcConfig = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
+      { urls: 'stun:stun1.l.google.com:19302' },
+      // Open Relay Project free TURN servers
+      {
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+          'turn:openrelay.metered.ca:443?transport=tcp'
+        ],
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
     ]
   }
 
@@ -170,39 +216,41 @@ function DualStream() {
     try {
       switch (data.type) {
         case 'joined':
-          console.log('Joined room:', data.roomId)
-          createPeerConnection()
+          console.log('Joined room:', data.roomId, 'Existing users:', data.existingUsers)
+          // Create peer connections for all existing users (mesh architecture)
+          if (data.existingUsers && data.existingUsers.length > 0) {
+            for (const existingUserId of data.existingUsers) {
+              await createPeerConnectionForUser(existingUserId)
+              await createOfferForUser(existingUserId)
+            }
+          }
           break
 
         case 'user-joined':
           console.log('User joined:', data.userId)
-          setRemoteUserId(data.userId)
-          await createOffer()
+          // Create peer connection for the new user
+          await createPeerConnectionForUser(data.userId)
+          await createOfferForUser(data.userId)
           break
 
         case 'offer':
           console.log('Received offer from:', data.from)
-          setRemoteUserId(data.from)
-          await handleOffer(data.offer)
+          await handleOffer(data.offer, data.from)
           break
 
         case 'answer':
           console.log('Received answer from:', data.from)
-          await handleAnswer(data.answer)
+          await handleAnswer(data.answer, data.from)
           break
 
         case 'ice-candidate':
           console.log('Received ICE candidate from:', data.from)
-          await handleIceCandidate(data.candidate)
+          await handleIceCandidate(data.candidate, data.from)
           break
 
         case 'user-left':
           console.log('User left:', data.userId)
-          setRemoteUserId(null)
-          if (peerConnectionRef.current) {
-            peerConnectionRef.current.close()
-            peerConnectionRef.current = null
-          }
+          removePeerConnection(data.userId)
           break
 
         case 'error':
@@ -257,17 +305,29 @@ function DualStream() {
     }
   }
 
-  const createPeerConnection = () => {
+  const createPeerConnectionForUser = (targetUserId) => {
+    // Don't create duplicate connections
+    if (peerConnectionsRef.current.has(targetUserId)) {
+      console.log(`Peer connection already exists for ${targetUserId}`)
+      return
+    }
+
     const pc = new RTCPeerConnection(rtcConfig)
-    peerConnectionRef.current = pc
+    peerConnectionsRef.current.set(targetUserId, pc)
 
     addLocalTracksToPeerConnection(pc)
 
     pc.ontrack = (event) => {
-      console.log('Received remote stream')
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = event.streams[0]
-      }
+      console.log(`Received remote stream from ${targetUserId}`)
+      const stream = event.streams[0]
+      remoteStreamsRef.current.set(targetUserId, stream)
+      
+      // Update state to trigger re-render
+      setRemoteUsers(prev => {
+        const newMap = new Map(prev)
+        newMap.set(targetUserId, { stream, connectionState: pc.connectionState })
+        return newMap
+      })
     }
 
     pc.onicecandidate = (event) => {
@@ -275,55 +335,70 @@ function DualStream() {
         wsRef.current.send(JSON.stringify({
           type: 'ice-candidate',
           candidate: event.candidate,
+          to: targetUserId, // Send to specific user
           roomId: roomId || 'default'
         }))
       }
     }
 
     pc.onconnectionstatechange = () => {
-      console.log('Connection state:', pc.connectionState)
+      console.log(`Connection state with ${targetUserId}:`, pc.connectionState)
+      
+      // Update state
+      setRemoteUsers(prev => {
+        const newMap = new Map(prev)
+        const existing = newMap.get(targetUserId) || {}
+        newMap.set(targetUserId, { ...existing, connectionState: pc.connectionState })
+        return newMap
+      })
+      
       if (pc.connectionState === 'failed') {
-        setError('Peer connection failed')
+        console.error(`Peer connection failed with ${targetUserId}`)
       }
     }
   }
 
-  const createOffer = async () => {
-    if (!peerConnectionRef.current) {
-      createPeerConnection()
+  const createOfferForUser = async (targetUserId) => {
+    let pc = peerConnectionsRef.current.get(targetUserId)
+    
+    if (!pc) {
+      createPeerConnectionForUser(targetUserId)
+      pc = peerConnectionsRef.current.get(targetUserId)
     }
 
     try {
-      const pc = peerConnectionRef.current
       addLocalTracksToPeerConnection(pc)
       
       if (pc.signalingState !== 'stable') {
-        console.log('Cannot create offer, connection state:', pc.signalingState)
+        console.log(`Cannot create offer for ${targetUserId}, connection state:`, pc.signalingState)
         return
       }
       
       const offer = await pc.createOffer()
       await pc.setLocalDescription(offer)
-      console.log('Created and set local offer')
+      console.log(`Created and set local offer for ${targetUserId}`)
 
       wsRef.current?.send(JSON.stringify({
         type: 'offer',
         offer: offer,
+        to: targetUserId, // Send to specific user
         roomId: roomId || 'default'
       }))
     } catch (error) {
-      console.error('Error creating offer:', error)
+      console.error(`Error creating offer for ${targetUserId}:`, error)
       setError(`Error creating offer: ${error.message}`)
     }
   }
 
-  const handleOffer = async (offer) => {
-    if (!peerConnectionRef.current) {
-      createPeerConnection()
+  const handleOffer = async (offer, fromUserId) => {
+    let pc = peerConnectionsRef.current.get(fromUserId)
+    
+    if (!pc) {
+      createPeerConnectionForUser(fromUserId)
+      pc = peerConnectionsRef.current.get(fromUserId)
     }
 
     try {
-      const pc = peerConnectionRef.current
       addLocalTracksToPeerConnection(pc)
       
       if (pc.signalingState === 'stable') {
@@ -334,48 +409,66 @@ function DualStream() {
         wsRef.current?.send(JSON.stringify({
           type: 'answer',
           answer: answer,
+          to: fromUserId, // Send to specific user
           roomId: roomId || 'default'
         }))
       }
     } catch (error) {
-      console.error('Error handling offer:', error)
+      console.error(`Error handling offer from ${fromUserId}:`, error)
       setError(`Error handling offer: ${error.message}`)
     }
   }
 
-  const handleAnswer = async (answer) => {
-    if (!peerConnectionRef.current) return
+  const handleAnswer = async (answer, fromUserId) => {
+    const pc = peerConnectionsRef.current.get(fromUserId)
+    if (!pc) return
 
     try {
-      const pc = peerConnectionRef.current
       const currentState = pc.signalingState
       
       if (currentState === 'have-local-offer') {
         await pc.setRemoteDescription(new RTCSessionDescription(answer))
-        console.log('Successfully set remote answer')
+        console.log(`Successfully set remote answer from ${fromUserId}`)
       } else if (currentState === 'stable') {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer))
         } catch (e) {
-          console.warn('Could not set remote answer (connection already established):', e.message)
+          console.warn(`Could not set remote answer from ${fromUserId} (connection already established):`, e.message)
         }
       }
     } catch (error) {
-      console.error('Error handling answer:', error)
+      console.error(`Error handling answer from ${fromUserId}:`, error)
       if (!error.message.includes('stable')) {
         setError(`Error handling answer: ${error.message}`)
       }
     }
   }
 
-  const handleIceCandidate = async (candidate) => {
-    if (!peerConnectionRef.current) return
+  const handleIceCandidate = async (candidate, fromUserId) => {
+    const pc = peerConnectionsRef.current.get(fromUserId)
+    if (!pc) return
 
     try {
-      await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate))
+      await pc.addIceCandidate(new RTCIceCandidate(candidate))
     } catch (error) {
-      console.error('Error adding ICE candidate:', error)
+      console.error(`Error adding ICE candidate from ${fromUserId}:`, error)
     }
+  }
+
+  const removePeerConnection = (userId) => {
+    const pc = peerConnectionsRef.current.get(userId)
+    if (pc) {
+      pc.close()
+      peerConnectionsRef.current.delete(userId)
+    }
+    
+    remoteStreamsRef.current.delete(userId)
+    
+    setRemoteUsers(prev => {
+      const newMap = new Map(prev)
+      newMap.delete(userId)
+      return newMap
+    })
   }
 
   const startRecording = () => {
@@ -472,23 +565,34 @@ function DualStream() {
   }
 
   const cleanup = () => {
+    // Stop local streams
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop())
     }
     if (webRTCStreamRef.current) {
       webRTCStreamRef.current.getTracks().forEach(track => track.stop())
     }
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close()
-      peerConnectionRef.current = null
-    }
+    
+    // Close all peer connections
+    peerConnectionsRef.current.forEach((pc, userId) => {
+      pc.close()
+    })
+    peerConnectionsRef.current.clear()
+    remoteStreamsRef.current.clear()
+    
+    // Close WebSocket
     if (wsRef.current) {
       wsRef.current.close()
       wsRef.current = null
     }
+    
+    // Stop recording
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop()
     }
+    
+    // Clear remote users
+    setRemoteUsers(new Map())
   }
 
   return (
@@ -503,6 +607,11 @@ function DualStream() {
             <span className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`}></span>
             {isConnected ? 'Connected' : 'Connecting...'}
           </div>
+          {remoteUsers.size > 0 && (
+            <div className="user-count">
+              {remoteUsers.size} {remoteUsers.size === 1 ? 'user' : 'users'} connected
+            </div>
+          )}
           {isRecording && (
             <div className="recording-badge">
               <span className="recording-dot"></span>
@@ -524,23 +633,23 @@ function DualStream() {
           <div className="video-label">You (High Quality)</div>
         </div>
 
-        <div className="video-wrapper">
-          {remoteUserId ? (
-            <>
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                className="video-preview remote-video"
-              />
-              <div className="video-label">Remote User</div>
-            </>
-          ) : (
+        {Array.from(remoteUsers.entries()).map(([userId, userData]) => (
+          <RemoteVideo
+            key={userId}
+            userId={userId}
+            stream={userData.stream}
+            connectionState={userData.connectionState}
+          />
+        ))}
+
+        {remoteUsers.size === 0 && (
+          <div className="video-wrapper">
             <div className="waiting-message">
-              <p>Waiting for another user to join...</p>
+              <p>Waiting for other users to join...</p>
+              <p className="waiting-subtitle">Up to 4 users can join this studio</p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="controls-section">
