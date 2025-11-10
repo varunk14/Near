@@ -39,7 +39,7 @@ CREATE POLICY "Users can delete their own studios"
   FOR DELETE
   USING (auth.uid() = user_id);
 
--- Create Recordings table (MVP 8, MVP 9: Added owner_id for authentication)
+-- Create Recordings table (MVP 8, MVP 9: Added owner_id, MVP 10: Added final_file_path)
 CREATE TABLE IF NOT EXISTS recordings (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   studio_id UUID REFERENCES studios(id) ON DELETE CASCADE,
@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS recordings (
   user_id TEXT, -- The user ID from the WebRTC session (e.g., user_1234567890_xyz)
   user_name TEXT, -- Optional user name
   file_paths TEXT[] NOT NULL, -- Array of R2 file paths (chunks)
+  final_file_path TEXT, -- MVP 10: Path to the merged final file
   chunk_count INTEGER DEFAULT 0,
   status TEXT DEFAULT 'recording', -- 'recording', 'completed', 'processing', 'ready'
   started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

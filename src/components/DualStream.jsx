@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { uploadToR2 } from '../utils/r2Upload'
 import { getStudio, createRecording, updateRecording } from '../utils/api'
+import { getAuthHeaders } from '../utils/api'
 import './DualStream.css'
 
 // Get WebSocket URL from environment or use default
@@ -622,7 +623,7 @@ function DualStream() {
           await new Promise(resolve => setTimeout(resolve, 100))
         }
         
-        // Update recording status to completed
+        // Update recording status to completed and trigger processing
         if (recordingIdRef.current) {
           try {
             await updateRecording(
@@ -631,6 +632,22 @@ function DualStream() {
               'completed',
               new Date().toISOString()
             )
+            
+            // Trigger processing workflow (MVP 10)
+            try {
+              const apiUrl = import.meta.env.VITE_API_URL || 
+                (import.meta.env.VITE_WS_URL?.replace('wss://', 'https://').replace('ws://', 'http://'))
+              const headers = await getAuthHeaders()
+              
+              await fetch(`${apiUrl}/api/process-recording/${recordingIdRef.current}`, {
+                method: 'POST',
+                headers
+              })
+              console.log('✅ Triggered processing workflow')
+            } catch (err) {
+              console.warn('Failed to trigger processing workflow:', err)
+              // Non-critical - recording is still saved
+            }
           } catch (err) {
             console.warn('Failed to update recording status:', err)
           }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { getRecordings } from '../utils/api'
 import './Dashboard.css'
@@ -24,7 +24,7 @@ function Dashboard() {
     fetchRecordings()
   }, [])
 
-  const fetchRecordings = async () => {
+  const fetchRecordings = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -36,7 +36,7 @@ function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Unknown date'
@@ -129,9 +129,27 @@ function Dashboard() {
                   </div>
                 </div>
 
-                {recording.file_paths && recording.file_paths.length > 0 ? (
+                {recording.status === 'ready' && recording.final_file_path ? (
                   <div className="recording-files">
-                    <h4>Download Files:</h4>
+                    <h4>Download Final File:</h4>
+                    <div className="file-list">
+                      <a
+                        href={getR2PublicUrl(recording.final_file_path)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="file-link file-link-final"
+                      >
+                        🎬 Download Complete Recording ({recording.final_file_path})
+                      </a>
+                    </div>
+                  </div>
+                ) : recording.file_paths && recording.file_paths.length > 0 ? (
+                  <div className="recording-files">
+                    <h4>
+                      {recording.status === 'processing' 
+                        ? 'Processing... (Download chunks while waiting)' 
+                        : 'Download Chunks:'}
+                    </h4>
                     <div className="file-list">
                       {recording.file_paths.map((filePath, index) => (
                         <a
@@ -145,6 +163,11 @@ function Dashboard() {
                         </a>
                       ))}
                     </div>
+                    {recording.status === 'processing' && (
+                      <p className="processing-note">
+                        ⏳ Final file will be available when processing completes.
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <div className="no-files">

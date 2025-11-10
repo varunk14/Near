@@ -196,6 +196,33 @@
   transform: translateX(4px);
 }
 
+.file-link-final {
+  background: #d4edda;
+  border-color: #28a745;
+  color: #155724;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 1rem 1.5rem;
+}
+
+.file-link-final:hover {
+  background: #28a745;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+}
+
+.processing-note {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  color: #856404;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
 .no-files {
   margin-top: 1rem;
   padding-top: 1rem;

@@ -3,6 +3,7 @@ import { WebSocketServer } from 'ws'
 import http from 'http'
 import cors from 'cors'
 import { createClient } from '@supabase/supabase-js'
+import fetch from 'node-fetch'
 
 const app = express()
 const server = http.createServer(app)
@@ -383,7 +384,7 @@ app.post('/api/recordings', async (req, res) => {
 app.patch('/api/recordings/:recording_id', async (req, res) => {
   try {
     const { recording_id } = req.params
-    const { file_path, status, completed_at } = req.body
+    const { file_path, status, completed_at, final_file_path } = req.body
 
     if (!supabase) {
       return res.json({ message: 'Recording updated (database not configured)' })
@@ -421,6 +422,11 @@ app.patch('/api/recordings/:recording_id', async (req, res) => {
 
     if (completed_at) {
       updateData.completed_at = completed_at
+    }
+
+    // MVP 10: Add final_file_path when processing is complete
+    if (final_file_path) {
+      updateData.final_file_path = final_file_path
     }
 
     const { data, error } = await supabase
@@ -487,6 +493,64 @@ app.get('/api/recordings', async (req, res) => {
     res.json({ recordings: data || [] })
   } catch (error) {
     console.error('Error in get-recordings endpoint:', error)
+    res.status(500).json({ error: 'Internal server error', details: error.message })
+  }
+})
+
+// API: Trigger GitHub Actions workflow for processing (MVP 10)
+app.post('/api/process-recording/:recording_id', async (req, res) => {
+  try {
+    const { recording_id } = req.params
+    
+    const githubToken = process.env.GITHUB_TOKEN
+    const githubRepo = process.env.GITHUB_REPO // Format: owner/repo (e.g., varunk14/Near)
+    
+    if (!githubToken || !githubRepo) {
+      console.warn('GitHub credentials not configured. Processing will not be triggered.')
+      return res.json({ 
+        message: 'Processing not configured',
+        recording_id 
+      })
+    }
+
+    const renderApiUrl = process.env.RENDER_API_URL || `https://${process.env.CORS_ORIGIN?.replace('https://', '') || 'localhost:3001'}`
+    
+    // Trigger GitHub Actions workflow
+    const workflowUrl = `https://api.github.com/repos/${githubRepo}/actions/workflows/process-recording.yml/dispatches`
+    
+    const response = await fetch(workflowUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `token ${githubToken}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        ref: 'main', // or 'master' depending on your default branch
+        inputs: {
+          recording_id: recording_id,
+          render_api_url: renderApiUrl,
+          render_api_token: process.env.RENDER_API_TOKEN || ''
+        }
+      })
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Failed to trigger workflow:', errorText)
+      return res.status(500).json({ 
+        error: 'Failed to trigger processing workflow',
+        details: errorText 
+      })
+    }
+
+    console.log(`✅ Triggered processing workflow for recording: ${recording_id}`)
+    res.json({ 
+      message: 'Processing workflow triggered',
+      recording_id 
+    })
+  } catch (error) {
+    console.error('Error triggering workflow:', error)
     res.status(500).json({ error: 'Internal server error', details: error.message })
   }
 })

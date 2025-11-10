@@ -42,7 +42,7 @@ const getAuthToken = async () => {
 }
 
 // Helper to create headers with auth
-const getAuthHeaders = async () => {
+export const getAuthHeaders = async () => {
   const token = await getAuthToken()
   const headers = {
     'Content-Type': 'application/json',
@@ -119,17 +119,17 @@ export async function createRecording(studio_id, recording_id, user_id, user_nam
   }
 }
 
-export async function updateRecording(recording_id, file_path, status, completed_at) {
+export async function updateRecording(recording_id, file_path, status, completed_at, final_file_path) {
   try {
+    const headers = await getAuthHeaders()
     const response = await fetch(`${API_URL}/api/recordings/${recording_id}`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         file_path,
         status,
-        completed_at
+        completed_at,
+        final_file_path
       }),
     })
 
