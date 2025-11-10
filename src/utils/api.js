@@ -74,3 +74,77 @@ export async function getStudio(id) {
   }
 }
 
+export async function createRecording(studio_id, recording_id, user_id, user_name) {
+  try {
+    const response = await fetch(`${API_URL}/api/recordings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        studio_id,
+        recording_id,
+        user_id,
+        user_name
+      }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to create recording')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Error creating recording:', error)
+    throw error
+  }
+}
+
+export async function updateRecording(recording_id, file_path, status, completed_at) {
+  try {
+    const response = await fetch(`${API_URL}/api/recordings/${recording_id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        file_path,
+        status,
+        completed_at
+      }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to update recording')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Error updating recording:', error)
+    throw error
+  }
+}
+
+export async function getRecordings(studio_id = null) {
+  try {
+    const url = studio_id 
+      ? `${API_URL}/api/recordings?studio_id=${studio_id}`
+      : `${API_URL}/api/recordings`
+    
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to fetch recordings')
+    }
+
+    const data = await response.json()
+    return data.recordings || []
+  } catch (error) {
+    console.error('Error fetching recordings:', error)
+    throw error
+  }
+}
+

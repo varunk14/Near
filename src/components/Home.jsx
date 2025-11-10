@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { createStudio } from '../utils/api'
 import './Home.css'
 
@@ -43,8 +43,15 @@ function Home() {
   return (
     <div className="home-container">
       <div className="home-card">
-        <h1>Near</h1>
-        <p className="subtitle">Studio Quality Recording & Live Chat</p>
+        <div className="home-header">
+          <div>
+            <h1>Near</h1>
+            <p className="subtitle">Studio Quality Recording & Live Chat</p>
+          </div>
+          <Link to="/dashboard" className="btn-dashboard">
+            📊 Dashboard
+          </Link>
+        </div>
 
         <div className="options">
           <div className="option-card">

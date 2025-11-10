@@ -277,6 +277,162 @@ app.get('/api/studio/:id', async (req, res) => {
   }
 })
 
+// API: Create a new recording
+app.post('/api/recordings', async (req, res) => {
+  try {
+    const { studio_id, recording_id, user_id, user_name } = req.body
+
+    if (!recording_id) {
+      return res.status(400).json({ error: 'Recording ID is required' })
+    }
+
+    if (!supabase) {
+      return res.json({
+        id: `rec_${Date.now()}`,
+        recording_id,
+        studio_id: studio_id || null,
+        user_id: user_id || null,
+        user_name: user_name || null,
+        file_paths: [],
+        chunk_count: 0,
+        status: 'recording',
+        message: 'Recording created (database not configured)'
+      })
+    }
+
+    const { data, error } = await supabase
+      .from('recordings')
+      .insert([
+        {
+          studio_id: studio_id || null,
+          recording_id,
+          user_id: user_id || null,
+          user_name: user_name || null,
+          file_paths: [],
+          chunk_count: 0,
+          status: 'recording'
+        }
+      ])
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error creating recording:', error)
+      return res.status(500).json({ error: 'Failed to create recording', details: error.message })
+    }
+
+    res.json(data)
+  } catch (error) {
+    console.error('Error in create-recording endpoint:', error)
+    res.status(500).json({ error: 'Internal server error', details: error.message })
+  }
+})
+
+// API: Update recording (add file path, update status, etc.)
+app.patch('/api/recordings/:recording_id', async (req, res) => {
+  try {
+    const { recording_id } = req.params
+    const { file_path, status, completed_at } = req.body
+
+    if (!supabase) {
+      return res.json({ message: 'Recording updated (database not configured)' })
+    }
+
+    // Get existing recording
+    const { data: existing, error: fetchError } = await supabase
+      .from('recordings')
+      .select('*')
+      .eq('recording_id', recording_id)
+      .single()
+
+    if (fetchError || !existing) {
+      return res.status(404).json({ error: 'Recording not found' })
+    }
+
+    // Update file_paths array if new file_path provided
+    let file_paths = existing.file_paths || []
+    if (file_path) {
+      file_paths = [...file_paths, file_path]
+    }
+
+    // Update chunk_count
+    const chunk_count = file_paths.length
+
+    // Build update object
+    const updateData = {
+      file_paths,
+      chunk_count
+    }
+
+    if (status) {
+      updateData.status = status
+    }
+
+    if (completed_at) {
+      updateData.completed_at = completed_at
+    }
+
+    const { data, error } = await supabase
+      .from('recordings')
+      .update(updateData)
+      .eq('recording_id', recording_id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error updating recording:', error)
+      return res.status(500).json({ error: 'Failed to update recording', details: error.message })
+    }
+
+    res.json(data)
+  } catch (error) {
+    console.error('Error in update-recording endpoint:', error)
+    res.status(500).json({ error: 'Internal server error', details: error.message })
+  }
+})
+
+// API: Get all recordings
+app.get('/api/recordings', async (req, res) => {
+  try {
+    const { studio_id } = req.query
+
+    if (!supabase) {
+      return res.json({
+        recordings: [],
+        message: 'Database not configured'
+      })
+    }
+
+    let query = supabase
+      .from('recordings')
+      .select(`
+        *,
+        studios (
+          id,
+          name
+        )
+      `)
+      .order('created_at', { ascending: false })
+
+    // Filter by studio_id if provided
+    if (studio_id) {
+      query = query.eq('studio_id', studio_id)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('Error fetching recordings:', error)
+      return res.status(500).json({ error: 'Failed to fetch recordings', details: error.message })
+    }
+
+    res.json({ recordings: data || [] })
+  } catch (error) {
+    console.error('Error in get-recordings endpoint:', error)
+    res.status(500).json({ error: 'Internal server error', details: error.message })
+  }
+})
+
 const PORT = process.env.PORT || 3001
 
 server.listen(PORT, () => {

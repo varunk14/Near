@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { uploadToR2 } from '../utils/r2Upload'
-import { getStudio } from '../utils/api'
+import { getStudio, createRecording, updateRecording } from '../utils/api'
 import './DualStream.css'
 
 // Get WebSocket URL from environment or use default
@@ -518,7 +518,7 @@ function DualStream() {
     })
   }
 
-  const startRecording = () => {
+  const startRecording = async () => {
     if (!localStreamRef.current) {
       setError('No media stream available for recording')
       return
@@ -530,6 +530,19 @@ function DualStream() {
       uploadedChunksCountRef.current = 0
       setUploadedChunks(0)
       pendingUploadsRef.current.clear()
+      
+      // Create recording entry in database
+      try {
+        await createRecording(
+          roomId || null,
+          recordingIdRef.current,
+          userIdRef.current || null,
+          userName || null
+        )
+      } catch (err) {
+        console.warn('Failed to create recording in database:', err)
+        // Continue anyway - recording will still work
+      }
       
       const options = {
         mimeType: 'video/webm;codecs=vp9,opus',
@@ -558,6 +571,20 @@ function DualStream() {
         
         while (pendingUploadsRef.current.size > 0) {
           await new Promise(resolve => setTimeout(resolve, 100))
+        }
+        
+        // Update recording status to completed
+        if (recordingIdRef.current) {
+          try {
+            await updateRecording(
+              recordingIdRef.current,
+              null, // no new file_path
+              'completed',
+              new Date().toISOString()
+            )
+          } catch (err) {
+            console.warn('Failed to update recording status:', err)
+          }
         }
         
         setUploadStatus(`Recording complete! Uploaded ${uploadedChunksCountRef.current} chunk${uploadedChunksCountRef.current !== 1 ? 's' : ''}.`)
@@ -598,6 +625,14 @@ function DualStream() {
       uploadedChunksCountRef.current += 1
       setUploadedChunks(uploadedChunksCountRef.current)
       setUploadStatus(`Uploaded chunk ${chunkNumber + 1}...`)
+      
+      // Update recording in database with new file path
+      try {
+        await updateRecording(recordingIdRef.current, chunkFilename)
+      } catch (err) {
+        console.warn('Failed to update recording with file path:', err)
+        // Continue anyway - file is uploaded
+      }
       
       console.log(`Successfully uploaded chunk ${chunkNumber}: ${chunkFilename}`)
     } catch (err) {
