@@ -8,14 +8,14 @@ function Auth({ onClose }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
+  const [success, setSuccess] = useState(null)
 
   const { signIn, signUp } = useAuth()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError(null)
-    setSuccess(false)
+    setSuccess(null)
     setLoading(true)
 
     try {
@@ -102,7 +102,7 @@ function Auth({ onClose }) {
               onClick={() => {
                 setIsSignUp(!isSignUp)
                 setError(null)
-                setSuccess(false)
+                setSuccess(null)
               }}
               className="auth-link"
             >
