@@ -27,11 +27,11 @@ function Lobby() {
   }, [])
 
   useEffect(() => {
-    // Update preview when device selection changes
-    if (selectedCamera || selectedMicrophone) {
+    // Update preview when device selection changes (but not on initial mount)
+    if (!isLoading && (selectedCamera || selectedMicrophone)) {
       updatePreview()
     }
-  }, [selectedCamera, selectedMicrophone])
+  }, [selectedCamera, selectedMicrophone, isLoading])
 
   const enumerateDevices = async () => {
     try {
@@ -46,7 +46,7 @@ function Lobby() {
       
       setDevices({ cameras, microphones })
       
-      // Set default selections
+      // Set default selections and start preview
       if (cameras.length > 0 && !selectedCamera) {
         setSelectedCamera(cameras[0].deviceId)
       }
@@ -55,6 +55,13 @@ function Lobby() {
       }
       
       setIsLoading(false)
+      
+      // Start preview with default devices
+      if (cameras.length > 0 || microphones.length > 0) {
+        setTimeout(() => {
+          updatePreview()
+        }, 100)
+      }
     } catch (err) {
       setError(`Error accessing devices: ${err.message}`)
       setIsLoading(false)
