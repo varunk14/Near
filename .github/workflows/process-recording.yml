@@ -125,7 +125,7 @@ jobs:
           
           echo "✅ Uploaded final file: ${RECORDING_ID}_final.webm"
 
-      - name: Update recording status in database
+      - name: Update recording status to ready
         env:
           RENDER_API_URL: ${{ inputs.render_api_url }}
           RENDER_API_TOKEN: ${{ inputs.render_api_token }}
