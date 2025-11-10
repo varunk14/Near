@@ -345,10 +345,10 @@ function DualStream() {
         default:
           console.log('Unknown message type:', data.type)
       }
-      } catch (error) {
-        console.error('Error handling signaling message:', error)
-        setError(`Error: ${error.message || error.name || 'Unknown error occurred'}`)
-      }
+    } catch (error) {
+      console.error('Error handling signaling message:', error)
+      setError(`Error: ${error.message || error.name || 'Unknown error occurred'}`)
+    }
   }
 
   const addLocalTracksToPeerConnection = (pc) => {
