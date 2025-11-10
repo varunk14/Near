@@ -76,7 +76,7 @@ function Dashboard() {
           <div className="status status-error">
             <div>
               <strong>Error:</strong> {error}
-              {error.includes('Database') || error.includes('table') && (
+              {(error.includes('Database') || error.includes('table')) && (
                 <div className="error-hint">
                   <p>💡 Make sure you've:</p>
                   <ol>
