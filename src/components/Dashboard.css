@@ -219,13 +219,35 @@
   font-weight: 500;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 1rem;
 }
 
 .status-error {
   background: #f8d7da;
   color: #721c24;
   border: 1px solid #f5c6cb;
+}
+
+.error-hint {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(114, 28, 36, 0.2);
+  font-size: 0.9rem;
+}
+
+.error-hint p {
+  margin: 0.5rem 0;
+  font-weight: 600;
+}
+
+.error-hint ol {
+  margin: 0.5rem 0 0 1.5rem;
+  padding: 0;
+}
+
+.error-hint li {
+  margin: 0.25rem 0;
 }
 
 .btn-retry {

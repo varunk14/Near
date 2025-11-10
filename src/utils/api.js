@@ -136,14 +136,28 @@ export async function getRecordings(studio_id = null) {
     const response = await fetch(url)
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Failed to fetch recordings')
+      const errorData = await response.json().catch(() => ({}))
+      const errorMessage = errorData.error || errorData.details || 'Failed to fetch recordings'
+      throw new Error(errorMessage)
     }
 
     const data = await response.json()
+    
+    // If database is not configured, return empty array gracefully
+    if (data.message && data.message.includes('not configured')) {
+      console.warn('Database not configured. Recordings will not be saved.')
+      return []
+    }
+    
     return data.recordings || []
   } catch (error) {
     console.error('Error fetching recordings:', error)
+    
+    // Provide more helpful error messages
+    if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+      throw new Error('Unable to connect to server. Please check your connection.')
+    }
+    
     throw error
   }
 }

@@ -74,7 +74,18 @@ function Dashboard() {
 
         {error && (
           <div className="status status-error">
-            {error}
+            <div>
+              <strong>Error:</strong> {error}
+              {error.includes('Database') || error.includes('table') && (
+                <div className="error-hint">
+                  <p>💡 Make sure you've:</p>
+                  <ol>
+                    <li>Created the Recordings table in Supabase (run the SQL schema)</li>
+                    <li>Configured SUPABASE_URL and SUPABASE_ANON_KEY in your Render backend</li>
+                  </ol>
+                </div>
+              )}
+            </div>
             <button onClick={fetchRecordings} className="btn-retry">Retry</button>
           </div>
         )}
