@@ -21,7 +21,6 @@ function Auth({ onClose }) {
     try {
       if (isSignUp) {
         await signUp(email, password)
-        setSuccess(true)
         setSuccess('Account created! Please check your email to verify your account.')
       } else {
         await signIn(email, password)
