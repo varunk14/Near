@@ -513,7 +513,28 @@ app.post('/api/process-recording/:recording_id', async (req, res) => {
       })
     }
 
-    const renderApiUrl = process.env.RENDER_API_URL || `https://${process.env.CORS_ORIGIN?.replace('https://', '') || 'localhost:3001'}`
+    // Update status to processing first
+    if (supabase) {
+      try {
+        const { data: existing } = await supabase
+          .from('recordings')
+          .select('*')
+          .eq('recording_id', recording_id)
+          .single()
+        
+        if (existing) {
+          await supabase
+            .from('recordings')
+            .update({ status: 'processing' })
+            .eq('recording_id', recording_id)
+        }
+      } catch (err) {
+        console.warn('Failed to update status to processing:', err)
+      }
+    }
+
+    const renderApiUrl = process.env.RENDER_API_URL || 
+      (process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.replace(/\/$/, '') : `http://localhost:${PORT}`)
     
     // Trigger GitHub Actions workflow
     const workflowUrl = `https://api.github.com/repos/${githubRepo}/actions/workflows/process-recording.yml/dispatches`
@@ -521,7 +542,7 @@ app.post('/api/process-recording/:recording_id', async (req, res) => {
     const response = await fetch(workflowUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `token ${githubToken}`,
+        'Authorization': `Bearer ${githubToken}`,
         'Accept': 'application/vnd.github.v3+json',
         'Content-Type': 'application/json'
       },

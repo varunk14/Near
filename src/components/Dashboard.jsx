@@ -20,10 +20,6 @@ function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    fetchRecordings()
-  }, [])
-
   const fetchRecordings = useCallback(async () => {
     try {
       setLoading(true)
@@ -37,6 +33,21 @@ function Dashboard() {
       setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    fetchRecordings()
+  }, [fetchRecordings])
+
+  // Auto-refresh when there are processing recordings
+  useEffect(() => {
+    const hasProcessing = recordings.some(r => r.status === 'processing')
+    if (hasProcessing) {
+      const interval = setInterval(() => {
+        fetchRecordings()
+      }, 5000) // Refresh every 5 seconds
+      return () => clearInterval(interval)
+    }
+  }, [recordings, fetchRecordings])
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Unknown date'
