@@ -38,13 +38,20 @@ function Home() {
     
     try {
       const name = studioName.trim() || `Studio ${new Date().toLocaleString()}`
+      console.log('Attempting to create studio:', name, 'User:', user?.id)
       const studio = await createStudio(name)
+      console.log('Studio created successfully:', studio)
       
       // Navigate to the lobby first (Green Room)
       navigate(`/studio/${studio.id}/lobby`)
     } catch (err) {
-      setError(err.message || 'Failed to create studio')
+      const errorMessage = err.message || 'Failed to create studio'
+      setError(errorMessage)
       console.error('Error creating studio:', err)
+      // Show more details in console for debugging
+      if (err.response) {
+        console.error('Error response:', err.response)
+      }
     } finally {
       setIsCreatingStudio(false)
     }

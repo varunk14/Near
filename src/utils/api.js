@@ -56,6 +56,9 @@ export const getAuthHeaders = async () => {
 export async function createStudio(name) {
   try {
     const headers = await getAuthHeaders()
+    console.log('Creating studio with API URL:', API_URL)
+    console.log('Headers:', { ...headers, Authorization: headers.Authorization ? 'Bearer ***' : 'none' })
+    
     const response = await fetch(`${API_URL}/api/create-studio`, {
       method: 'POST',
       headers,
@@ -63,13 +66,23 @@ export async function createStudio(name) {
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Failed to create studio')
+      let errorData
+      try {
+        errorData = await response.json()
+      } catch (e) {
+        errorData = { error: `HTTP ${response.status}: ${response.statusText}` }
+      }
+      console.error('API error response:', errorData)
+      throw new Error(errorData.error || errorData.details || `Failed to create studio (${response.status})`)
     }
 
     return await response.json()
   } catch (error) {
     console.error('Error creating studio:', error)
+    // If it's a network error, provide more helpful message
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error(`Cannot connect to server. Please check if the backend is running at ${API_URL}`)
+    }
     throw error
   }
 }

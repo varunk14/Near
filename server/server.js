@@ -260,12 +260,24 @@ app.post('/api/create-studio', async (req, res) => {
     const authHeader = req.headers.authorization
     const token = authHeader?.substring(7) // Remove 'Bearer ' prefix
     
+    if (!token) {
+      console.error('No token provided in authorization header')
+      return res.status(401).json({ error: 'Authentication token required' })
+    }
+    
+    console.log('Creating studio for user:', user.id, 'with token:', token.substring(0, 20) + '...')
+    
     // Create a Supabase client with the user's token for RLS
+    // Pass the token in the auth context so RLS can see the authenticated user
     const userSupabase = createClient(supabaseUrl, supabaseKey, {
       global: {
         headers: {
           Authorization: `Bearer ${token}`
         }
+      },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false
       }
     })
 
@@ -282,8 +294,14 @@ app.post('/api/create-studio', async (req, res) => {
       .single()
 
     if (error) {
-      console.error('Error creating studio:', error)
-      return res.status(500).json({ error: 'Failed to create studio', details: error.message })
+      console.error('Error creating studio in Supabase:', error)
+      console.error('Error code:', error.code, 'Error message:', error.message, 'Error details:', error.details)
+      return res.status(500).json({ 
+        error: 'Failed to create studio', 
+        details: error.message,
+        code: error.code,
+        hint: error.hint
+      })
     }
 
     res.json(data)
