@@ -256,8 +256,21 @@ app.post('/api/create-studio', async (req, res) => {
       })
     }
 
-    // Insert into Supabase with user_id
-    const { data, error } = await supabase
+    // Get the user's JWT token for RLS
+    const authHeader = req.headers.authorization
+    const token = authHeader?.substring(7) // Remove 'Bearer ' prefix
+    
+    // Create a Supabase client with the user's token for RLS
+    const userSupabase = createClient(supabaseUrl, supabaseKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    })
+
+    // Insert into Supabase with user_id (using user's token for RLS)
+    const { data, error } = await userSupabase
       .from('studios')
       .insert([
         {
@@ -390,8 +403,29 @@ app.patch('/api/recordings/:recording_id', async (req, res) => {
       return res.json({ message: 'Recording updated (database not configured)' })
     }
 
+    // Check if this is a GitHub Actions call (using RENDER_API_TOKEN)
+    const authHeader = req.headers.authorization
+    const token = authHeader?.substring(7) // Remove 'Bearer ' prefix
+    const isGitHubActions = token === process.env.RENDER_API_TOKEN
+    
+    // Use service role key for GitHub Actions, user token for frontend calls
+    let clientToUse = supabase
+    if (!isGitHubActions && token) {
+      // Use user's token for RLS
+      clientToUse = createClient(supabaseUrl, supabaseKey, {
+        global: {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      })
+    } else if (isGitHubActions && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      // Use service role key to bypass RLS for GitHub Actions
+      clientToUse = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY)
+    }
+
     // Get existing recording
-    const { data: existing, error: fetchError } = await supabase
+    const { data: existing, error: fetchError } = await clientToUse
       .from('recordings')
       .select('*')
       .eq('recording_id', recording_id)
@@ -429,7 +463,7 @@ app.patch('/api/recordings/:recording_id', async (req, res) => {
       updateData.final_file_path = final_file_path
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await clientToUse
       .from('recordings')
       .update(updateData)
       .eq('recording_id', recording_id)
@@ -466,7 +500,20 @@ app.get('/api/recordings', async (req, res) => {
       })
     }
 
-    let query = supabase
+    // Get the user's JWT token for RLS
+    const authHeader = req.headers.authorization
+    const token = authHeader?.substring(7) // Remove 'Bearer ' prefix
+    
+    // Create a Supabase client with the user's token for RLS
+    const userSupabase = createClient(supabaseUrl, supabaseKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    })
+
+    let query = userSupabase
       .from('recordings')
       .select(`
         *,
@@ -513,17 +560,22 @@ app.post('/api/process-recording/:recording_id', async (req, res) => {
       })
     }
 
-    // Update status to processing first
+    // Update status to processing first (use service role key if available to bypass RLS)
     if (supabase) {
       try {
-        const { data: existing } = await supabase
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+        const clientToUse = serviceRoleKey 
+          ? createClient(supabaseUrl, serviceRoleKey)
+          : supabase
+        
+        const { data: existing } = await clientToUse
           .from('recordings')
           .select('*')
           .eq('recording_id', recording_id)
           .single()
         
         if (existing) {
-          await supabase
+          await clientToUse
             .from('recordings')
             .update({ status: 'processing' })
             .eq('recording_id', recording_id)
