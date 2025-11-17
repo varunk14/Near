@@ -239,39 +239,62 @@ function DualStream() {
 
   const connectWebSocket = () => {
     return new Promise((resolve, reject) => {
+      console.log(`🔌 Connecting to WebSocket: ${WS_URL}`)
       const ws = new WebSocket(WS_URL)
       wsRef.current = ws
 
       ws.onopen = () => {
-        console.log('WebSocket connected')
+        console.log('✅ WebSocket connected successfully')
         setIsConnected(true)
+        setError(null) // Clear any previous errors
         
         userIdRef.current = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
         
-        ws.send(JSON.stringify({
+        const joinMessage = {
           type: 'join-room',
           roomId: roomId || 'default',
           userId: userIdRef.current,
           userName: userName || null
-        }))
+        }
+        
+        console.log('📤 Sending join-room message:', joinMessage)
+        ws.send(JSON.stringify(joinMessage))
         
         resolve()
       }
 
       ws.onmessage = async (event) => {
-        const data = JSON.parse(event.data)
-        await handleSignalingMessage(data)
+        try {
+          const data = JSON.parse(event.data)
+          console.log('📥 Received WebSocket message:', data.type, data)
+          await handleSignalingMessage(data)
+        } catch (err) {
+          console.error('Error parsing WebSocket message:', err)
+        }
       }
 
       ws.onerror = (error) => {
-        console.error('WebSocket error:', error)
-        setError('WebSocket connection error')
+        console.error('❌ WebSocket error:', error)
+        const errorMsg = `WebSocket connection error. Make sure the signaling server is running at ${WS_URL}`
+        setError(errorMsg)
         reject(error)
       }
 
-      ws.onclose = () => {
-        console.log('WebSocket disconnected')
+      ws.onclose = (event) => {
+        console.log('🔌 WebSocket disconnected', { code: event.code, reason: event.reason, wasClean: event.wasClean })
         setIsConnected(false)
+        
+        // Try to reconnect if it wasn't a clean close
+        if (!event.wasClean && event.code !== 1000) {
+          console.log('Attempting to reconnect WebSocket in 3 seconds...')
+          setTimeout(() => {
+            if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
+              connectWebSocket().catch(err => {
+                console.error('Failed to reconnect:', err)
+              })
+            }
+          }, 3000)
+        }
       }
     })
   }
@@ -280,35 +303,41 @@ function DualStream() {
     try {
       switch (data.type) {
         case 'joined':
-          console.log('Joined room:', data.roomId, 'Existing users:', data.existingUsers)
+          console.log('✅ Joined room:', data.roomId, 'Existing users:', data.existingUsers)
           // Create peer connections for all existing users (mesh architecture)
           if (data.existingUsers && data.existingUsers.length > 0) {
-            for (const existingUserId of data.existingUsers) {
-              await createPeerConnectionForUser(existingUserId)
-              await createOfferForUser(existingUserId)
-              
-              // Store user names if provided
-              if (data.existingUsersWithNames) {
-                const userInfo = data.existingUsersWithNames.find(u => u.userId === existingUserId)
-                if (userInfo && userInfo.userName) {
+            // Store user names first
+            if (data.existingUsersWithNames) {
+              data.existingUsersWithNames.forEach(userInfo => {
+                if (userInfo.userName) {
                   setRemoteUsers(prev => {
                     const newMap = new Map(prev)
-                    const existing = newMap.get(existingUserId) || {}
-                    newMap.set(existingUserId, { ...existing, name: userInfo.userName })
+                    const existing = newMap.get(userInfo.userId) || {}
+                    newMap.set(userInfo.userId, { ...existing, name: userInfo.userName })
                     return newMap
                   })
                 }
-              }
+              })
             }
+            
+            // Wait a bit to ensure local stream is ready, then create connections
+            setTimeout(async () => {
+              for (const existingUserId of data.existingUsers) {
+                if (!peerConnectionsRef.current.has(existingUserId)) {
+                  console.log(`Creating peer connection for existing user: ${existingUserId}`)
+                  await createPeerConnectionForUser(existingUserId)
+                  // Small delay between creating connections
+                  await new Promise(resolve => setTimeout(resolve, 100))
+                  await createOfferForUser(existingUserId)
+                }
+              }
+            }, 500)
           }
           break
 
         case 'user-joined':
-          console.log('User joined:', data.userId, data.userName || 'unnamed')
-          // Create peer connection for the new user
-          await createPeerConnectionForUser(data.userId)
-          await createOfferForUser(data.userId)
-          // Store user name
+          console.log('👤 User joined:', data.userId, data.userName || 'unnamed')
+          // Store user name first
           if (data.userName) {
             setRemoteUsers(prev => {
               const newMap = new Map(prev)
@@ -316,6 +345,18 @@ function DualStream() {
               newMap.set(data.userId, { ...existing, name: data.userName })
               return newMap
             })
+          }
+          // Create peer connection for the new user and send an offer
+          // In mesh architecture, both users create connections to each other
+          if (!peerConnectionsRef.current.has(data.userId)) {
+            console.log(`Creating peer connection and sending offer to new user: ${data.userId}`)
+            // Wait a bit to ensure the new user has set up their peer connection
+            setTimeout(async () => {
+              if (!peerConnectionsRef.current.has(data.userId)) {
+                await createPeerConnectionForUser(data.userId)
+                await createOfferForUser(data.userId)
+              }
+            }, 300)
           }
           break
 
@@ -404,20 +445,51 @@ function DualStream() {
     addLocalTracksToPeerConnection(pc)
 
     pc.ontrack = (event) => {
-      console.log(`Received remote stream from ${targetUserId}`, event.streams[0])
-      const stream = event.streams[0]
-      remoteStreamsRef.current.set(targetUserId, stream)
+      console.log(`🎥 Received remote track from ${targetUserId}`, event)
+      console.log(`Track event details:`, {
+        streams: event.streams.length,
+        track: event.track ? { kind: event.track.kind, id: event.track.id, enabled: event.track.enabled } : null,
+        transceiver: event.transceiver ? { direction: event.transceiver.direction } : null
+      })
+      
+      // Get stream from event (preferred) or create new one from track
+      let stream = event.streams[0]
+      if (!stream && event.track) {
+        stream = new MediaStream([event.track])
+        console.log(`Created new stream from track for ${targetUserId}`)
+      }
+      
+      if (!stream) {
+        console.warn(`No stream found in track event from ${targetUserId}`)
+        return
+      }
+      
+      // If we already have a stream for this user, add the new track to it
+      const existingStream = remoteStreamsRef.current.get(targetUserId)
+      if (existingStream && event.track) {
+        // Check if track already exists
+        const trackExists = existingStream.getTracks().some(t => t.id === event.track.id)
+        if (!trackExists) {
+          existingStream.addTrack(event.track)
+          console.log(`Added ${event.track.kind} track to existing stream for ${targetUserId}`)
+        }
+        stream = existingStream
+      } else {
+        remoteStreamsRef.current.set(targetUserId, stream)
+      }
       
       // Check if stream has video/audio tracks
       const hasVideo = stream.getVideoTracks().length > 0
       const hasAudio = stream.getAudioTracks().length > 0
       
-      console.log(`Stream from ${targetUserId} - Video: ${hasVideo}, Audio: ${hasAudio}`)
+      console.log(`✅ Stream from ${targetUserId} - Video: ${hasVideo} (${stream.getVideoTracks().length} tracks), Audio: ${hasAudio} (${stream.getAudioTracks().length} tracks)`)
       
       // Update state to trigger re-render
       setRemoteUsers(prev => {
         const newMap = new Map(prev)
+        const existing = newMap.get(targetUserId) || {}
         newMap.set(targetUserId, { 
+          ...existing,
           stream, 
           connectionState: pc.connectionState,
           hasVideo,
@@ -439,7 +511,7 @@ function DualStream() {
     }
 
     pc.onconnectionstatechange = () => {
-      console.log(`Connection state with ${targetUserId}:`, pc.connectionState)
+      console.log(`🔌 Connection state with ${targetUserId}: ${pc.connectionState}`)
       
       // Update state
       setRemoteUsers(prev => {
@@ -450,7 +522,29 @@ function DualStream() {
       })
       
       if (pc.connectionState === 'failed') {
-        console.error(`Peer connection failed with ${targetUserId}`)
+        console.error(`❌ Peer connection failed with ${targetUserId}. Attempting to restart...`)
+        // Try to restart the connection
+        setTimeout(() => {
+          if (peerConnectionsRef.current.has(targetUserId)) {
+            const failedPc = peerConnectionsRef.current.get(targetUserId)
+            if (failedPc.connectionState === 'failed') {
+              console.log(`Restarting connection with ${targetUserId}`)
+              removePeerConnection(targetUserId)
+              createPeerConnectionForUser(targetUserId)
+              createOfferForUser(targetUserId)
+            }
+          }
+        }, 1000)
+      } else if (pc.connectionState === 'connected') {
+        console.log(`✅ Successfully connected to ${targetUserId}`)
+      }
+    }
+    
+    // Add ice connection state change handler
+    pc.oniceconnectionstatechange = () => {
+      console.log(`🧊 ICE connection state with ${targetUserId}: ${pc.iceConnectionState}`)
+      if (pc.iceConnectionState === 'failed') {
+        console.error(`ICE connection failed with ${targetUserId}`)
       }
     }
   }
@@ -498,10 +592,13 @@ function DualStream() {
     try {
       addLocalTracksToPeerConnection(pc)
       
+      // Handle offer - should be in 'stable' state when receiving an offer
       if (pc.signalingState === 'stable') {
         await pc.setRemoteDescription(new RTCSessionDescription(offer))
         const answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
+
+        console.log(`✅ Created and sent answer to ${fromUserId}`)
 
         wsRef.current?.send(JSON.stringify({
           type: 'answer',
@@ -509,6 +606,26 @@ function DualStream() {
           to: fromUserId, // Send to specific user
           roomId: roomId || 'default'
         }))
+      } else {
+        console.warn(`⚠️ Cannot handle offer from ${fromUserId}, signaling state: ${pc.signalingState}. Waiting for stable state...`)
+        // If not stable, wait a bit and try again
+        setTimeout(async () => {
+          if (pc.signalingState === 'stable') {
+            try {
+              await pc.setRemoteDescription(new RTCSessionDescription(offer))
+              const answer = await pc.createAnswer()
+              await pc.setLocalDescription(answer)
+              wsRef.current?.send(JSON.stringify({
+                type: 'answer',
+                answer: answer,
+                to: fromUserId,
+                roomId: roomId || 'default'
+              }))
+            } catch (err) {
+              console.error(`Error retrying offer handling:`, err)
+            }
+          }
+        }, 500)
       }
     } catch (error) {
       console.error(`Error handling offer from ${fromUserId}:`, error)
@@ -518,26 +635,32 @@ function DualStream() {
 
   const handleAnswer = async (answer, fromUserId) => {
     const pc = peerConnectionsRef.current.get(fromUserId)
-    if (!pc) return
+    if (!pc) {
+      console.warn(`No peer connection found for ${fromUserId} when handling answer`)
+      return
+    }
 
     try {
       const currentState = pc.signalingState
+      console.log(`Handling answer from ${fromUserId}, current signaling state: ${currentState}`)
       
-      if (currentState === 'have-local-offer') {
+      if (currentState === 'have-local-offer' || currentState === 'have-remote-offer') {
         await pc.setRemoteDescription(new RTCSessionDescription(answer))
         console.log(`Successfully set remote answer from ${fromUserId}`)
       } else if (currentState === 'stable') {
+        // Connection might already be established, try to set anyway
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(answer))
+          console.log(`Set remote answer from ${fromUserId} (connection was stable)`)
         } catch (e) {
           console.warn(`Could not set remote answer from ${fromUserId} (connection already established):`, e.message)
         }
+      } else {
+        console.warn(`Unexpected signaling state when handling answer from ${fromUserId}: ${currentState}`)
       }
     } catch (error) {
       console.error(`Error handling answer from ${fromUserId}:`, error)
-      if (!error.message.includes('stable')) {
-        setError(`Error handling answer: ${error.message}`)
-      }
+      setError(`Error handling answer: ${error.message || error.name || 'Unknown error'}`)
     }
   }
 
