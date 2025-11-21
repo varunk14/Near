@@ -571,9 +571,12 @@ app.post('/api/process-recording/:recording_id', async (req, res) => {
     const githubRepo = process.env.GITHUB_REPO // Format: owner/repo (e.g., varunk14/Near)
     
     if (!githubToken || !githubRepo) {
-      console.warn('GitHub credentials not configured. Processing will not be triggered.')
-      return res.json({ 
-        message: 'Processing not configured',
+      console.warn('⚠️ GitHub credentials not configured. Processing will not be triggered.')
+      console.warn('   Missing: GITHUB_TOKEN=' + (githubToken ? 'SET' : 'NOT SET'))
+      console.warn('   Missing: GITHUB_REPO=' + (githubRepo ? 'SET' : 'NOT SET'))
+      return res.status(400).json({ 
+        error: 'Processing not configured',
+        message: 'GitHub credentials (GITHUB_TOKEN, GITHUB_REPO) are required to trigger processing workflow',
         recording_id 
       })
     }

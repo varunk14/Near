@@ -762,13 +762,23 @@ function DualStream() {
                 (import.meta.env.VITE_WS_URL?.replace('wss://', 'https://').replace('ws://', 'http://'))
               const headers = await getAuthHeaders()
               
-              await fetch(`${apiUrl}/api/process-recording/${recordingIdRef.current}`, {
+              const response = await fetch(`${apiUrl}/api/process-recording/${recordingIdRef.current}`, {
                 method: 'POST',
                 headers
               })
-              console.log('✅ Triggered processing workflow')
+              
+              const result = await response.json()
+              
+              if (response.ok) {
+                console.log('✅ Triggered processing workflow:', result.message || result)
+              } else {
+                console.warn('⚠️ Failed to trigger processing workflow:', result.error || result.message || 'Unknown error')
+                if (result.error === 'Processing not configured') {
+                  console.warn('   → Set GITHUB_TOKEN and GITHUB_REPO in your Render environment variables')
+                }
+              }
             } catch (err) {
-              console.warn('Failed to trigger processing workflow:', err)
+              console.warn('⚠️ Failed to trigger processing workflow:', err.message || err)
               // Non-critical - recording is still saved
             }
           } catch (err) {

@@ -24,11 +24,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
       - name: Install AWS CLI
         run: |
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -57,58 +52,117 @@ jobs:
           RECORDING_ID: ${{ inputs.recording_id }}
         run: |
           mkdir -p chunks
+          
+          echo "🔍 Looking for chunks with prefix: ${RECORDING_ID}_chunk_"
+          
           # List all chunks for this recording
           aws s3api list-objects-v2 \
             --endpoint-url https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com \
             --bucket ${R2_BUCKET_NAME} \
             --prefix "${RECORDING_ID}_chunk_" \
             --query 'Contents[].Key' \
-            --output text > chunk_list.txt
+            --output text > chunk_list.txt || true
           
-          # Download each chunk
+          # Check if any chunks were found
+          if [ ! -f chunk_list.txt ] || [ ! -s chunk_list.txt ] || [ -z "$(cat chunk_list.txt 2>/dev/null | tr -d '[:space:]')" ]; then
+            echo "❌ No chunks found for recording ${RECORDING_ID}"
+            echo "Available objects in bucket (first 10):"
+            aws s3api list-objects-v2 \
+              --endpoint-url https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com \
+              --bucket ${R2_BUCKET_NAME} \
+              --max-items 10 \
+              --query 'Contents[].Key' \
+              --output text || true
+            exit 1
+          fi
+          
+          echo "📥 Found chunks, downloading..."
+          chunk_count=0
           while IFS= read -r chunk_key; do
-            if [ ! -z "$chunk_key" ]; then
+            if [ ! -z "$chunk_key" ] && [ "$chunk_key" != "None" ]; then
+              echo "  Downloading: ${chunk_key}"
               aws s3 cp \
                 --endpoint-url https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com \
                 "s3://${R2_BUCKET_NAME}/${chunk_key}" \
-                "chunks/${chunk_key}"
+                "chunks/${chunk_key}" || {
+                  echo "⚠️ Failed to download ${chunk_key}, continuing..."
+                  continue
+                }
+              chunk_count=$((chunk_count + 1))
             fi
           done < chunk_list.txt
           
-          # Sort chunks by number
-          ls -1 chunks/${RECORDING_ID}_chunk_*.webm | sort -V > sorted_chunks.txt
+          if [ $chunk_count -eq 0 ]; then
+            echo "❌ No chunks were successfully downloaded"
+            exit 1
+          fi
+          
+          echo "✅ Downloaded ${chunk_count} chunk(s)"
+          
+          # Sort chunks by number (handle case where no files match)
+          if ls chunks/${RECORDING_ID}_chunk_*.webm 1> /dev/null 2>&1; then
+            ls -1 chunks/${RECORDING_ID}_chunk_*.webm | sort -V > sorted_chunks.txt
+            echo "📋 Sorted chunks:"
+            cat sorted_chunks.txt
+          else
+            echo "❌ No .webm files found in chunks directory"
+            ls -la chunks/ || true
+            exit 1
+          fi
 
       - name: Merge chunks with FFmpeg
         env:
           RECORDING_ID: ${{ inputs.recording_id }}
         run: |
+          set -e
+          
           if [ ! -s sorted_chunks.txt ]; then
-            echo "⚠️ No chunks to merge"
+            echo "❌ No chunks to merge (sorted_chunks.txt is empty)"
             exit 1
           fi
           
-          # Create concat file for FFmpeg
+          echo "🔗 Creating concat file for FFmpeg..."
+          rm -f concat_list.txt
+          chunk_count=0
           while IFS= read -r chunk_file; do
             if [ -f "$chunk_file" ]; then
-              echo "file '$(pwd)/${chunk_file}'" >> concat_list.txt
+              # Use absolute path for FFmpeg
+              abs_path=$(cd "$(dirname "$chunk_file")" && pwd)/$(basename "$chunk_file")
+              echo "file '${abs_path}'" >> concat_list.txt
+              chunk_count=$((chunk_count + 1))
+            else
+              echo "⚠️ Warning: Chunk file not found: ${chunk_file}"
             fi
           done < sorted_chunks.txt
           
-          if [ ! -s concat_list.txt ]; then
-            echo "⚠️ No valid chunks to merge"
+          if [ ! -s concat_list.txt ] || [ $chunk_count -eq 0 ]; then
+            echo "❌ No valid chunks to merge"
             exit 1
           fi
           
-          # Merge all chunks into one file
-          ffmpeg -f concat -safe 0 -i concat_list.txt -c copy "final_${RECORDING_ID}.webm" || {
-            echo "⚠️ FFmpeg merge failed, trying with re-encoding"
-            ffmpeg -f concat -safe 0 -i concat_list.txt -c:v libvpx-vp9 -c:a libopus "final_${RECORDING_ID}.webm"
-          }
+          echo "📝 Concat file contents:"
+          cat concat_list.txt
+          echo ""
+          echo "🎬 Merging ${chunk_count} chunk(s) with FFmpeg..."
+          
+          # Try copy mode first (fastest, no re-encoding)
+          if ffmpeg -f concat -safe 0 -i concat_list.txt -c copy "final_${RECORDING_ID}.webm" 2>&1; then
+            echo "✅ Merge successful (copy mode)"
+          else
+            echo "⚠️ Copy mode failed, trying with re-encoding..."
+            if ffmpeg -f concat -safe 0 -i concat_list.txt -c:v libvpx-vp9 -c:a libopus "final_${RECORDING_ID}.webm" 2>&1; then
+              echo "✅ Merge successful (re-encoded)"
+            else
+              echo "❌ FFmpeg merge failed completely"
+              exit 1
+            fi
+          fi
           
           if [ -f "final_${RECORDING_ID}.webm" ]; then
-            echo "✅ Merged file size: $(du -h final_${RECORDING_ID}.webm | cut -f1)"
+            file_size=$(du -h "final_${RECORDING_ID}.webm" | cut -f1)
+            echo "✅ Merged file created: final_${RECORDING_ID}.webm (${file_size})"
           else
-            echo "⚠️ Failed to create merged file"
+            echo "❌ Failed to create merged file"
             exit 1
           fi
 
@@ -131,13 +185,28 @@ jobs:
           RENDER_API_TOKEN: ${{ inputs.render_api_token }}
           RECORDING_ID: ${{ inputs.recording_id }}
         run: |
-          curl -X PATCH "${RENDER_API_URL}/api/recordings/${RECORDING_ID}" \
+          echo "📤 Updating recording status in database..."
+          final_file_path="${RECORDING_ID}_final.webm"
+          
+          response=$(curl -s -w "\n%{http_code}" -X PATCH "${RENDER_API_URL}/api/recordings/${RECORDING_ID}" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${RENDER_API_TOKEN}" \
-            -d '{
-              "status": "ready",
-              "final_file_path": "'"${RECORDING_ID}"'_final.webm"
-            }' || echo "⚠️ Failed to update status (non-critical)"
+            -d "{
+              \"status\": \"ready\",
+              \"final_file_path\": \"${final_file_path}\"
+            }")
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          if [ "$http_code" -eq 200 ] || [ "$http_code" -eq 201 ]; then
+            echo "✅ Successfully updated recording status to 'ready'"
+            echo "Response: $body"
+          else
+            echo "⚠️ Failed to update status (HTTP $http_code)"
+            echo "Response: $body"
+            # Don't fail the workflow - the file is uploaded successfully
+          fi
 
       - name: Cleanup
         if: always()
